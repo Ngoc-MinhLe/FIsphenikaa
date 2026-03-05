@@ -243,6 +243,8 @@
                                         <option value="">-- Chọn ca trực --</option>
                                         <option value="Sáng">Sáng</option>
                                         <option value="Chiều">Chiều</option>
+                                        <!-- Tùy chọn mới cho đăng ký 2 ca cùng lúc -->
+                                        <option value="Cả ngày">Cả ngày (Sáng & Chiều)</option>
                                     </select>
                                 </div>
                                 <div class="mb-5">
@@ -352,7 +354,7 @@
                     </div>
                 </div>
 
-                <!-- KHUNG QUẢN LÝ SỐ ĐIỆN THOẠI (NEW) -->
+                <!-- KHUNG QUẢN LÝ SỐ ĐIỆN THOẠI -->
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8">
                     <h3 class="font-bold text-lg mb-4 text-phenikaa-blue border-b pb-2"><i class="fas fa-address-book mr-2 text-phenikaa-orange"></i>Quản lý Số điện thoại Giảng viên</h3>
                     <div class="overflow-x-auto max-h-[300px]">
@@ -428,7 +430,7 @@
             <div class="signature-area">
                 <p id="print-current-date">Hà Nội, Ngày ....... tháng ....... năm .......</p>
                 <p style="font-weight: bold; margin-bottom: 60px;">TRƯỞNG KHOA</p>
-                <p style="font-weight: bold;">TS. TRỊNH THANH BÌNH</p>
+                <p style="font-weight: bold;">TS.TRỊNH THANH BÌNH</p>
             </div>
         </div>
 
@@ -647,28 +649,43 @@
             e.preventDefault();
             const btn = document.getElementById('btn-submit-schedule');
             const date = document.getElementById('input-date').value;
-            const shift = document.getElementById('input-shift').value;
+            const shiftInput = document.getElementById('input-shift').value;
             const note = document.getElementById('input-note').value;
 
-            if (allSchedules.some(s => s.userId === currentUser.uid && s.date === date && s.shift === shift)) {
-                alert('Bạn đã đăng ký ca này trong ngày hôm đó rồi!'); return;
+            // Xác định danh sách ca cần đăng ký dựa vào lựa chọn của người dùng
+            const shiftsToRegister = shiftInput === 'Cả ngày' ? ['Sáng', 'Chiều'] : [shiftInput];
+
+            // Kiểm tra trùng lịch cho TẤT CẢ các ca sắp đăng ký
+            for (const s of shiftsToRegister) {
+                if (allSchedules.some(sch => sch.userId === currentUser.uid && sch.date === date && sch.shift === s)) {
+                    alert(`Bạn đã đăng ký ca ${s} trong ngày ${date.split('-').reverse().join('/')} rồi!`); 
+                    return;
+                }
             }
 
             btn.disabled = true; btn.innerHTML = 'Đang lưu...';
             try {
-                await addDoc(collection(db, "schedules"), {
-                    userId: currentUser.uid,
-                    userName: currentUser.shortName,
-                    shortName: currentUser.shortName,
-                    date: date,
-                    shift: shift,
-                    note: note,
-                    status: 'Chờ duyệt',
-                    createdAt: Date.now()
-                });
+                // Tạo từng bản ghi riêng biệt cho từng ca để dễ duyệt/thống kê/hiển thị lưới
+                for (const s of shiftsToRegister) {
+                    await addDoc(collection(db, "schedules"), {
+                        userId: currentUser.uid,
+                        userName: currentUser.shortName,
+                        shortName: currentUser.shortName,
+                        date: date,
+                        shift: s,
+                        note: note,
+                        status: 'Chờ duyệt',
+                        createdAt: Date.now()
+                    });
+                }
+                
                 document.getElementById('form-schedule').reset();
-            } catch (e) { alert("Lỗi: " + e.message); }
-            finally { btn.disabled = false; btn.innerHTML = 'Đăng ký ngay'; }
+                alert('Đăng ký lịch thành công!');
+            } catch (e) { 
+                alert("Lỗi: " + e.message); 
+            } finally { 
+                btn.disabled = false; btn.innerHTML = 'Đăng ký ngay'; 
+            }
         });
 
         // Hàm xóa lịch dung chung (Bảo mật: Admin có thể xóa bất kỳ lịch nào, User chỉ xóa lịch của mình)
