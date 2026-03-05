@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý - Đại học Phenikaa</title>
+    <!-- THÊM FAVICON (ICON TRANG WEB) -->
+    <link rel="icon" type="image/png" href="https://www.phenikaa.com/logo192.png">
+    
+    <!-- Tích hợp Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tích hợp FontAwesome cho icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Cấu hình màu sắc tùy chỉnh cho Phenikaa -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        phenikaa: { blue: '#00205b', orange: '#f26f21' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #00205b;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* CSS MÀN HÌNH IN */
+        #printable-report { display: none; } 
+        
+        @media print {
+            body * { visibility: hidden; } 
+            #printable-report, #printable-report * { visibility: visible; } 
+            #printable-report {
+                display: block;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white;
+                padding: 20px;
+                margin: 0;
+            }
+            .no-print { display: none !important; }
+            .print-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            .print-table th, .print-table td { border: 1px solid black; padding: 8px; text-align: center; }
+            .print-table th { font-weight: bold; background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
+            
+            /* Căn chỉnh header bản in có logo */
+            .print-header { 
+                display: flex; 
+                align-items: flex-start; 
+                gap: 15px; 
+                margin-bottom: 30px; 
+            }
+            .print-header-logo {
+                width: 65px;
+                height: auto;
+            }
+            .print-header-text {
+                display: flex;
+                flex-direction: column;
+                padding-top: 5px;
+            }
+            .print-header-text div { font-weight: bold; font-size: 15px; }
+            .print-header-text div:last-child {
+                border-bottom: 1.5px solid #000;
+                padding-bottom: 3px;
+                display: inline-block;
+                width: max-content;
+                margin-top: 2px;
+            }
+
+            .signature-area { margin-top: 50px; text-align: right; padding-right: 50px; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <!-- ==================== MÀN HÌNH ĐĂNG NHẬP ==================== -->
+    <div id="login-overlay" class="fixed inset-0 bg-gray-100 z-50 flex flex-col justify-center items-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md w-full border border-gray-200">
+            <div class="flex flex-col justify-center items-center gap-2 mb-6">
+                <!-- Thêm logo ảnh vào màn hình đăng nhập -->
+                <img src="https://www.phenikaa.com/logo192.png" alt="Phenikaa Logo" class="h-20 mb-2 drop-shadow-md">
+                <h1 class="text-2xl font-black text-phenikaa-blue tracking-tight mt-2">PHENIKAA<span class="text-phenikaa-orange"> PORTAL</span></h1>
+            </div>
+            
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Hệ Thống Đăng Nhập</h2>
+            <p class="text-gray-500 mb-8 text-sm">Sử dụng tài khoản Google để truy cập.</p>
+            
+            <button id="btn-google-login" class="w-full flex items-center justify-center bg-white border-2 border-gray-200 hover:border-phenikaa-blue hover:bg-blue-50 text-gray-700 font-semibold py-3 px-4 rounded-xl shadow-sm transition duration-200">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 mr-3" alt="Google Logo">
+                <span id="login-text">Đăng nhập với Google</span>
+            </button>
+            
+            <div id="login-error" class="hidden mt-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200 text-left">
+                <i class="fas fa-exclamation-circle mr-1"></i> <span id="error-message"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== KHUNG ỨNG DỤNG CHÍNH ==================== -->
+    <div id="app-container" class="min-h-screen hidden flex-col">
+        <!-- Navbar -->
+        <nav class="bg-phenikaa-blue text-white shadow-md no-print">
+            <div class="container mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
+                <div class="flex items-center space-x-3 cursor-pointer" onclick="window.showView('dashboard')">
+                    <!-- Icon trường nhỏ gọn trên Navbar -->
+                    <img src="https://www.phenikaa.com/logo192.png" class="h-8 bg-white p-1 rounded-full shadow" alt="Logo">
+                    <div>
+                        <h1 class="text-lg font-bold leading-tight">Phenikaa Portal</h1>
+                        <p class="text-[10px] text-gray-300 uppercase tracking-wider">Khoa HTT</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="text-right hidden md:block">
+                        <div id="user-name" class="font-bold text-sm">...</div>
+                        <div id="user-email" class="text-xs text-gray-300">...</div>
+                    </div>
+                    <div class="w-9 h-9 rounded-full bg-phenikaa-orange flex items-center justify-center font-bold shadow-inner overflow-hidden">
+                        <img id="user-avatar" src="" alt="Avatar" class="w-full h-full object-cover hidden">
+                        <i id="user-avatar-default" class="fas fa-user"></i>
+                    </div>
+                    <button id="btn-logout" class="hover:bg-blue-800 p-2 rounded transition" title="Đăng xuất">
+                        <i class="fas fa-sign-out-alt text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="flex-grow container mx-auto px-4 sm:px-6 py-8 no-print" id="main-content">
+            
+            <!-- VIEW 1: DASHBOARD -->
+            <div id="view-dashboard" class="fade-in">
+                <div class="flex justify-between items-end mb-6 border-b pb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Bảng điều khiển</h2>
+                        <p class="text-gray-500 text-sm mt-1">Chọn một chức năng để bắt đầu</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Module Đăng ký lịch -->
+                    <div onclick="window.showView('schedule')" class="cursor-pointer block bg-white rounded-2xl shadow-sm hover:shadow-lg transition transform hover:-translate-y-1 overflow-hidden group border border-gray-100">
+                        <div class="bg-phenikaa-orange h-1.5 group-hover:bg-orange-600 transition"></div>
+                        <div class="p-6">
+                            <div class="w-14 h-14 bg-orange-50 text-phenikaa-orange rounded-xl flex items-center justify-center mb-4 text-2xl group-hover:scale-110 transition-transform">
+                                <i class="fas fa-calendar-alt"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2 group-hover:text-phenikaa-blue transition-colors">Đăng ký lịch trực</h3>
+                            <p class="text-gray-500 text-sm">Xem lịch tuần của Khoa và đăng ký ca trực cá nhân.</p>
+                        </div>
+                    </div>
+
+                    <!-- Module Trưởng Khoa (Quản lý) -->
+                    <div id="admin-module-card" onclick="window.showView('admin')" class="hidden cursor-pointer block bg-white rounded-2xl shadow-sm hover:shadow-lg transition transform hover:-translate-y-1 overflow-hidden group border border-gray-100">
+                        <div class="bg-blue-600 h-1.5 group-hover:bg-blue-800 transition"></div>
+                        <div class="p-6">
+                            <div class="w-14 h-14 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 text-2xl group-hover:scale-110 transition-transform">
+                                <i class="fas fa-chart-bar"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2 group-hover:text-phenikaa-blue transition-colors">Trưởng Khoa / Quản lý</h3>
+                            <p class="text-gray-500 text-sm">Duyệt lịch, quản lý SĐT và in báo cáo nộp Khoa.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 2: LỊCH TRỰC (CÁ NHÂN & KHOA) -->
+            <div id="view-schedule" class="hidden fade-in">
+                <div class="flex items-center gap-3 mb-6 border-b pb-4">
+                    <button onclick="window.showView('dashboard')" class="text-gray-500 hover:text-phenikaa-blue bg-gray-100 hover:bg-gray-200 p-2 rounded-lg transition">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Lịch Cán Bộ Giảng Viên Trực Khoa</h2>
+                        <p class="text-gray-500 text-sm">Theo dõi lịch chung và đăng ký ca trực của bạn</p>
+                    </div>
+                </div>
+
+                <!-- BẢNG LỊCH TUẦN KHOA -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg text-phenikaa-blue"><i class="fas fa-calendar-week mr-2 text-phenikaa-orange"></i>Lịch Trực Tuần</h3>
+                        <div class="flex items-center gap-4">
+                            <button onclick="window.changeWeek(-1)" class="p-1 px-3 bg-gray-100 hover:bg-gray-200 rounded text-gray-600">&lt; Tuần trước</button>
+                            <span id="week-label" class="font-semibold text-gray-700">Tuần ...</span>
+                            <button onclick="window.changeWeek(1)" class="p-1 px-3 bg-gray-100 hover:bg-gray-200 rounded text-gray-600">Tuần sau &gt;</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-center border-collapse border border-gray-200 min-w-[800px]">
+                            <thead>
+                                <tr class="bg-gray-100 text-gray-700 text-sm">
+                                    <th class="border border-gray-200 p-2 w-24">Ca</th>
+                                    <th class="border border-gray-200 p-2 w-1/7">Thứ 2<br><span id="date-t2" class="text-xs font-normal"></span></th>
+                                    <th class="border border-gray-200 p-2 w-1/7">Thứ 3<br><span id="date-t3" class="text-xs font-normal"></span></th>
+                                    <th class="border border-gray-200 p-2 w-1/7">Thứ 4<br><span id="date-t4" class="text-xs font-normal"></span></th>
+                                    <th class="border border-gray-200 p-2 w-1/7">Thứ 5<br><span id="date-t5" class="text-xs font-normal"></span></th>
+                                    <th class="border border-gray-200 p-2 w-1/7">Thứ 6<br><span id="date-t6" class="text-xs font-normal"></span></th>
+                                    <th class="border border-gray-200 p-2 w-1/7">Thứ 7<br><span id="date-t7" class="text-xs font-normal"></span></th>
+                                    <th class="border border-gray-200 p-2 w-1/7">CN<br><span id="date-cn" class="text-xs font-normal"></span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="weekly-grid-body">
+                                <!-- Dữ liệu Sáng/Chiều render qua JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Form Đăng ký -->
+                    <div class="lg:col-span-1">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                            <h3 class="font-bold text-lg mb-4 text-phenikaa-blue border-b pb-2"><i class="fas fa-pen-square mr-2 text-phenikaa-orange"></i>Đăng ký ca mới</h3>
+                            <form id="form-schedule">
+                                <div class="mb-4">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-1">Ngày trực <span class="text-red-500">*</span></label>
+                                    <input type="date" id="input-date" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-phenikaa-blue outline-none transition">
+                                </div>
+                                <div class="mb-4">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-1">Ca trực <span class="text-red-500">*</span></label>
+                                    <select id="input-shift" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-phenikaa-blue outline-none transition bg-white">
+                                        <option value="">-- Chọn ca trực --</option>
+                                        <option value="Sáng">Sáng</option>
+                                        <option value="Chiều">Chiều</option>
+                                    </select>
+                                </div>
+                                <div class="mb-5">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-1">Ghi chú</label>
+                                    <input type="text" id="input-note" placeholder="Vd: Đổi ca cho thầy A..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-phenikaa-blue outline-none transition">
+                                </div>
+                                <button type="submit" id="btn-submit-schedule" class="w-full bg-phenikaa-blue hover:bg-blue-900 text-white font-bold py-2.5 px-4 rounded-lg shadow transition">
+                                    Đăng ký ngay
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Danh sách cá nhân -->
+                    <div class="lg:col-span-2">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-full">
+                            <h3 class="font-bold text-lg mb-4 text-phenikaa-blue border-b pb-2"><i class="fas fa-list mr-2 text-phenikaa-orange"></i>Lịch cá nhân của bạn</h3>
+                            
+                            <!-- BỘ LỌC CÁ NHÂN -->
+                            <div class="flex flex-col sm:flex-row gap-3 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                <div class="flex-1">
+                                    <label class="block text-xs text-gray-500 mb-1">Từ ngày</label>
+                                    <input type="date" id="my-filter-start" class="w-full px-3 py-1.5 text-sm border rounded outline-none">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block text-xs text-gray-500 mb-1">Đến ngày</label>
+                                    <input type="date" id="my-filter-end" class="w-full px-3 py-1.5 text-sm border rounded outline-none">
+                                </div>
+                                <div class="flex items-end">
+                                    <button onclick="window.renderMyScheduleTable()" class="w-full sm:w-auto bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-1.5 text-sm rounded shadow-sm transition font-medium">
+                                        <i class="fas fa-filter mr-1"></i> Lọc
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-gray-50 text-gray-600 text-sm">
+                                            <th class="p-3 border-b font-semibold rounded-tl-lg">Ngày</th>
+                                            <th class="p-3 border-b font-semibold">Ca</th>
+                                            <th class="p-3 border-b font-semibold">Ghi chú</th>
+                                            <th class="p-3 border-b font-semibold">Trạng thái</th>
+                                            <th class="p-3 border-b font-semibold rounded-tr-lg text-center">Xóa</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="my-schedule-body"></tbody>
+                                </table>
+                            </div>
+                            <div id="loading-schedule" class="text-center py-8 text-phenikaa-blue hidden"><div class="loader mb-2"></div><br>Đang tải...</div>
+                            <div id="empty-schedule" class="text-center py-8 text-gray-400 hidden"><p>Không có lịch trực nào trong khoảng thời gian này.</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 3: QUẢN LÝ / TRƯỞNG KHOA -->
+            <div id="view-admin" class="hidden fade-in">
+                <div class="flex items-center gap-3 mb-6 border-b pb-4">
+                    <button onclick="window.showView('dashboard')" class="text-gray-500 hover:text-phenikaa-blue bg-gray-100 hover:bg-gray-200 p-2 rounded-lg transition">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Quản Lý & Thống Kê</h2>
+                        <p class="text-gray-500 text-sm">Duyệt lịch, quản lý SĐT và tính giờ quy đổi cho Giảng viên Khoa HTT</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <!-- Khung Duyệt Lịch -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <h3 class="font-bold text-lg mb-4 text-phenikaa-blue border-b pb-2"><i class="fas fa-check-circle mr-2 text-phenikaa-orange"></i>Lịch chờ duyệt</h3>
+                        <div class="overflow-y-auto max-h-[300px] pr-2">
+                            <ul id="pending-list" class="divide-y divide-gray-100">
+                                <!-- Render danh sách chờ duyệt -->
+                            </ul>
+                            <div id="empty-pending" class="text-center py-4 text-gray-400 hidden">Không có lịch nào cần duyệt.</div>
+                        </div>
+                    </div>
+
+                    <!-- Khung Thống kê -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <h3 class="font-bold text-lg mb-4 text-phenikaa-blue border-b pb-2"><i class="fas fa-filter mr-2 text-phenikaa-orange"></i>Thống kê giờ trực</h3>
+                        
+                        <div class="mb-3">
+                            <label class="block text-xs text-gray-500 mb-1">Chọn Giảng viên</label>
+                            <select id="filter-lecturer" class="w-full px-3 py-2 border rounded outline-none bg-gray-50 focus:bg-white transition">
+                                <option value="all">-- Tất cả Giảng viên --</option>
+                                <!-- Danh sách GV render qua JS -->
+                            </select>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <div class="flex-1">
+                                <label class="block text-xs text-gray-500 mb-1">Từ ngày</label>
+                                <input type="date" id="filter-start" class="w-full px-3 py-2 border rounded outline-none">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-xs text-gray-500 mb-1">Đến ngày</label>
+                                <input type="date" id="filter-end" class="w-full px-3 py-2 border rounded outline-none">
+                            </div>
+                        </div>
+                        <button onclick="window.generateReport()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded shadow transition mb-3">
+                            Xem Thống Kê
+                        </button>
+                        <p class="text-xs text-gray-500 italic">* Chỉ tính các ca trực có trạng thái "Đã duyệt". 1 ca = 4 giờ quy đổi.</p>
+                    </div>
+                </div>
+
+                <!-- KHUNG QUẢN LÝ SỐ ĐIỆN THOẠI (NEW) -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8">
+                    <h3 class="font-bold text-lg mb-4 text-phenikaa-blue border-b pb-2"><i class="fas fa-address-book mr-2 text-phenikaa-orange"></i>Quản lý Số điện thoại Giảng viên</h3>
+                    <div class="overflow-x-auto max-h-[300px]">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 text-gray-600 text-sm">
+                                    <th class="p-3 border-b font-semibold">Tên Giảng viên</th>
+                                    <th class="p-3 border-b font-semibold">Số điện thoại</th>
+                                    <th class="p-3 border-b font-semibold text-center w-32">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="phone-list-body">
+                                <!-- Dữ liệu danh bạ render qua JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- KẾT QUẢ THỐNG KÊ (HIỂN THỊ KHI BẤM XEM) -->
+                <div id="report-container" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg text-gray-800">Kết quả tổng hợp</h3>
+                        <button onclick="window.printReport()" class="bg-phenikaa-orange hover:bg-orange-600 text-white px-4 py-2 rounded shadow flex items-center gap-2">
+                            <i class="fas fa-print"></i> In Báo Cáo Khoa
+                        </button>
+                    </div>
+                    
+                    <table class="w-full text-left border-collapse border border-gray-200">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="border p-2 w-12 text-center">STT</th>
+                                <th class="border p-2">Họ Tên</th>
+                                <th class="border p-2 text-center">Số buổi trực</th>
+                                <th class="border p-2 text-center">Giờ quy đổi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="report-table-body"></tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- VÙNG IN BÁO CÁO (BỊ ẨN TRÊN WEB, CHỈ HIỆN KHI IN) -->
+        <div id="printable-report">
+            <!-- HEADER CÓ LOGO -->
+            <div class="print-header">
+                <img src="https://www.phenikaa.com/logo192.png" class="print-header-logo" alt="Logo Phenikaa">
+                <div class="print-header-text">
+                    <div>TRƯỜNG CNTT PHENIKAA</div>
+                    <div>KHOA HTT</div>
+                </div>
+            </div>
+
+            <h2 style="text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 20px;">
+                Tổng hợp lịch trực Khoa - Khoa HTT<br>
+                <span id="print-date-range" style="font-size: 14px; font-weight: normal;"></span>
+            </h2>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">stt</th>
+                        <th>họ tên</th>
+                        <th>số buổi trực</th>
+                        <th>Giờ quy đổi</th>
+                        <th>ghi chú</th>
+                    </tr>
+                </thead>
+                <tbody id="print-table-body">
+                    <!-- Data here -->
+                </tbody>
+            </table>
+            <div class="signature-area">
+                <p id="print-current-date">Hà Nội, Ngày ....... tháng ....... năm .......</p>
+                <p style="font-weight: bold; margin-bottom: 60px;">TRƯỞNG KHOA</p>
+                <p style="font-weight: bold;">TS. TRỊNH THANH BÌNH</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- SỬ DỤNG SCRIPT MODULE FIREBASE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, deleteDoc, updateDoc, setDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCET0_R6120tj389v5C62NhSLrBIk2CbIw",
+            authDomain: "qlylaodong-dev.firebaseapp.com",
+            projectId: "qlylaodong-dev",
+            storageBucket: "qlylaodong-dev.firebasestorage.app",
+            messagingSenderId: "789374516793",
+            appId: "1:789374516793:web:29fb38ad0913f8b62e17e8",
+            measurementId: "G-M2PJEBLMJF"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+
+        // -------------------------------------------------------------
+        // CẤU HÌNH PHÂN QUYỀN TRƯỞNG KHOA / QUẢN TRỊ VIÊN
+        // -------------------------------------------------------------
+        const ADMIN_EMAILS = [
+            'binh.trinhthanh@phenikaa-uni.edu.vn',
+            'minhln@dhhp.edu.vn',
+        ];
+
+        let currentUser = null;
+        let isAdmin = false; 
+        let allSchedules = []; 
+        let userProfiles = {}; // Lưu trữ số điện thoại của Giảng viên
+        let currentWeekOffset = 0; 
+        let unsubscribeSchedules = null;
+        let unsubscribeProfiles = null;
+
+        const overlayLogin = document.getElementById('login-overlay');
+        const appContainer = document.getElementById('app-container');
+        const adminModuleCard = document.getElementById('admin-module-card'); 
+
+        // Lắng nghe đăng nhập
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                const email = user.email.toLowerCase();
+                if (email.endsWith('@phenikaa-uni.edu.vn') || email.endsWith('@dhhp.edu.vn') || email.endsWith('@gmail.com')) { 
+                    currentUser = user;
+                    
+                    isAdmin = ADMIN_EMAILS.includes(email);
+                    if (isAdmin) {
+                        adminModuleCard.classList.remove('hidden'); 
+                    } else {
+                        adminModuleCard.classList.add('hidden'); 
+                    }
+
+                    const emailPrefix = email.split('@')[0];
+                    currentUser.shortName = "T." + emailPrefix;
+
+                    document.getElementById('user-name').textContent = currentUser.shortName;
+                    document.getElementById('user-email').textContent = email;
+                    
+                    if(user.photoURL) {
+                        document.getElementById('user-avatar').src = user.photoURL;
+                        document.getElementById('user-avatar').classList.remove('hidden');
+                        document.getElementById('user-avatar-default').classList.add('hidden');
+                    }
+
+                    document.getElementById('login-error').classList.add('hidden');
+                    overlayLogin.classList.add('hidden');
+                    appContainer.classList.remove('hidden');
+                    
+                    const date = new Date();
+                    const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+                    const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+
+                    document.getElementById('filter-start').value = startOfMonth;
+                    document.getElementById('filter-end').value = endOfMonth;
+                    
+                    document.getElementById('my-filter-start').value = startOfMonth;
+                    document.getElementById('my-filter-end').value = endOfMonth;
+
+                    window.showView('dashboard');
+                    fetchAllData(); 
+                } else {
+                    signOut(auth);
+                    document.getElementById('error-message').innerText = `Tài khoản không hợp lệ. Chỉ chấp nhận email trường.`;
+                    document.getElementById('login-error').classList.remove('hidden');
+                }
+            } else {
+                currentUser = null;
+                isAdmin = false;
+                appContainer.classList.add('hidden');
+                overlayLogin.classList.remove('hidden');
+                adminModuleCard.classList.add('hidden');
+                if(unsubscribeSchedules) unsubscribeSchedules();
+                if(unsubscribeProfiles) unsubscribeProfiles();
+            }
+        });
+
+        document.getElementById('btn-google-login').addEventListener('click', async () => {
+            document.getElementById('login-text').innerText = "Đang kết nối...";
+            try { await signInWithPopup(auth, provider); } catch (e) { console.error(e); }
+            document.getElementById('login-text').innerText = "Đăng nhập với Google";
+        });
+
+        document.getElementById('btn-logout').addEventListener('click', () => {
+            if(confirm('Đăng xuất?')) signOut(auth);
+        });
+
+        window.showView = function(viewId) {
+            if (viewId === 'admin' && !isAdmin) {
+                alert("Bạn không có quyền truy cập chức năng Trưởng Khoa!");
+                return;
+            }
+
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-schedule').classList.add('hidden');
+            document.getElementById('view-admin').classList.add('hidden');
+            document.getElementById('view-' + viewId).classList.remove('hidden');
+            
+            if(viewId === 'schedule') {
+                renderWeeklyGrid();
+            }
+        };
+
+        // ==========================================
+        // DATA FETCHING (Schedules & User Profiles)
+        // ==========================================
+        function fetchAllData() {
+            if (!currentUser) return;
+            document.getElementById('loading-schedule').classList.remove('hidden');
+            
+            // Lắng nghe dữ liệu Số điện thoại
+            unsubscribeProfiles = onSnapshot(collection(db, 'user_profiles'), (snapshot) => {
+                userProfiles = {};
+                snapshot.forEach(docSnap => {
+                    userProfiles[docSnap.id] = docSnap.data();
+                });
+                renderWeeklyGrid();
+                if(isAdmin) renderPhoneManagement();
+            });
+
+            // Lắng nghe dữ liệu Lịch trực
+            unsubscribeSchedules = onSnapshot(collection(db, 'schedules'), (snapshot) => {
+                allSchedules = [];
+                snapshot.forEach((docSnap) => {
+                    allSchedules.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                
+                window.renderMyScheduleTable();
+                renderWeeklyGrid();
+                
+                if (isAdmin) {
+                    renderPendingApprovals();
+                    populateLecturerDropdown();
+                    renderPhoneManagement();
+                }
+            });
+        }
+
+        // ==========================================
+        // 1. CHỨC NĂNG LỊCH CÁ NHÂN
+        // ==========================================
+        window.renderMyScheduleTable = function() {
+            document.getElementById('loading-schedule').classList.add('hidden');
+            const tbody = document.getElementById('my-schedule-body');
+            const emptyState = document.getElementById('empty-schedule');
+            tbody.innerHTML = '';
+
+            const startDate = document.getElementById('my-filter-start').value;
+            const endDate = document.getElementById('my-filter-end').value;
+
+            let mySchedules = allSchedules.filter(s => s.userId === currentUser.uid);
+
+            if (startDate) mySchedules = mySchedules.filter(s => s.date >= startDate);
+            if (endDate) mySchedules = mySchedules.filter(s => s.date <= endDate);
+
+            mySchedules.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            if (mySchedules.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                mySchedules.forEach(item => {
+                    const dateStr = item.date.split('-').reverse().join('/');
+                    const statusClass = item.status === 'Đã duyệt' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700';
+                    const statusIcon = item.status === 'Đã duyệt' ? 'fa-check' : 'fa-clock';
+                    
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 border-b border-gray-100">
+                            <td class="p-3 font-medium text-gray-800">${dateStr}</td>
+                            <td class="p-3 text-phenikaa-blue font-semibold">${item.shift}</td>
+                            <td class="p-3 text-gray-600 text-sm">${item.note}</td>
+                            <td class="p-3">
+                                <span class="${statusClass} text-xs font-bold px-2 py-1 rounded-full inline-flex items-center">
+                                    <i class="fas ${statusIcon} mr-1"></i> ${item.status}
+                                </span>
+                            </td>
+                            <td class="p-3 text-center">
+                                <button onclick="window.deleteSchedule('${item.id}', '${item.userId}')" class="text-red-400 hover:text-red-600 p-1" title="Xóa lịch">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+        };
+
+        document.getElementById('form-schedule').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-submit-schedule');
+            const date = document.getElementById('input-date').value;
+            const shift = document.getElementById('input-shift').value;
+            const note = document.getElementById('input-note').value;
+
+            if (allSchedules.some(s => s.userId === currentUser.uid && s.date === date && s.shift === shift)) {
+                alert('Bạn đã đăng ký ca này trong ngày hôm đó rồi!'); return;
+            }
+
+            btn.disabled = true; btn.innerHTML = 'Đang lưu...';
+            try {
+                await addDoc(collection(db, "schedules"), {
+                    userId: currentUser.uid,
+                    userName: currentUser.shortName,
+                    shortName: currentUser.shortName,
+                    date: date,
+                    shift: shift,
+                    note: note,
+                    status: 'Chờ duyệt',
+                    createdAt: Date.now()
+                });
+                document.getElementById('form-schedule').reset();
+            } catch (e) { alert("Lỗi: " + e.message); }
+            finally { btn.disabled = false; btn.innerHTML = 'Đăng ký ngay'; }
+        });
+
+        // Hàm xóa lịch dung chung (Bảo mật: Admin có thể xóa bất kỳ lịch nào, User chỉ xóa lịch của mình)
+        window.deleteSchedule = async function(docId, scheduleUserId) {
+            if(confirm('Hủy/Xóa ca trực này khỏi hệ thống?')) {
+                // Rào bảo mật ở client
+                if(!isAdmin && scheduleUserId !== currentUser.uid) {
+                    alert("Bạn không có quyền xóa lịch của người khác!");
+                    return;
+                }
+                await deleteDoc(doc(db, "schedules", docId));
+            }
+        };
+
+        // ==========================================
+        // 2. CHỨC NĂNG LỊCH TUẦN KHOA (Hiển thị Lưới)
+        // ==========================================
+        window.changeWeek = function(offset) {
+            currentWeekOffset += offset;
+            renderWeeklyGrid();
+        }
+
+        function renderWeeklyGrid() {
+            const today = new Date();
+            const currentDayOfWeek = today.getDay() === 0 ? 7 : today.getDay(); 
+            
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - currentDayOfWeek + 1 + (currentWeekOffset * 7));
+            
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+            const sStr = `${startOfWeek.getDate()}/${startOfWeek.getMonth()+1}`;
+            const eStr = `${endOfWeek.getDate()}/${endOfWeek.getMonth()+1}/${endOfWeek.getFullYear()}`;
+            document.getElementById('week-label').innerText = `Tuần ${sStr} - ${eStr}`;
+
+            const weekDates = [];
+            const daysMap = ['t2', 't3', 't4', 't5', 't6', 't7', 'cn'];
+            
+            for(let i=0; i<7; i++) {
+                const d = new Date(startOfWeek);
+                d.setDate(startOfWeek.getDate() + i);
+                const isoDate = d.toISOString().split('T')[0];
+                weekDates.push(isoDate);
+                document.getElementById(`date-${daysMap[i]}`).innerText = `${d.getDate()}/${d.getMonth()+1}`;
+            }
+
+            const weekData = allSchedules.filter(s => weekDates.includes(s.date));
+            let gridHtml = '';
+            const shifts = ['Sáng', 'Chiều'];
+
+            shifts.forEach(shift => {
+                gridHtml += `<tr class="border-b border-gray-200 hover:bg-gray-50">
+                                <td class="p-2 font-bold text-phenikaa-blue border-r bg-gray-50">${shift}</td>`;
+                
+                weekDates.forEach(date => {
+                    const people = weekData.filter(s => s.date === date && s.shift === shift);
+                    let cellContent = '';
+                    if(people.length > 0) {
+                        cellContent = people.map(p => {
+                            const color = p.status === 'Đã duyệt' ? 'text-green-700 font-bold' : 'text-gray-600';
+                            const phone = userProfiles[p.userId]?.phone;
+                            const phoneStr = phone ? `<br><span class="text-xs text-gray-500 font-normal">(${phone})</span>` : '';
+                            
+                            // Nút xóa (chỉ hiện với Admin) - class no-print để không bị in ra giấy
+                            const deleteBtn = isAdmin ? `<i class="fas fa-times-circle text-red-400 hover:text-red-600 cursor-pointer ml-1 no-print" onclick="window.deleteSchedule('${p.id}', '${p.userId}')" title="Xóa lịch này"></i>` : '';
+
+                            return `<div class="${color} mb-2 p-1 relative">${p.shortName || p.userName} ${deleteBtn} ${phoneStr}</div>`;
+                        }).join('');
+                    }
+                    gridHtml += `<td class="p-2 border-r min-h-[60px] align-top">${cellContent}</td>`;
+                });
+                gridHtml += `</tr>`;
+            });
+
+            document.getElementById('weekly-grid-body').innerHTML = gridHtml;
+        }
+
+        // ==========================================
+        // 3. CHỨC NĂNG TRƯỞNG KHOA (Duyệt, Thống Kê & SĐT)
+        // ==========================================
+        
+        // Quản lý số điện thoại
+        function renderPhoneManagement() {
+            const tbody = document.getElementById('phone-list-body');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            const uniqueUsers = {};
+            allSchedules.forEach(s => {
+                if (!uniqueUsers[s.userId]) {
+                    uniqueUsers[s.userId] = s.shortName || s.userName;
+                }
+            });
+
+            for (const [id, name] of Object.entries(uniqueUsers)) {
+                const phone = userProfiles[id]?.phone || '';
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="p-3 font-medium text-gray-800">${name}</td>
+                        <td class="p-2">
+                            <input type="text" id="phone-${id}" value="${phone}" placeholder="Nhập số ĐT..." class="border border-gray-300 px-3 py-1.5 rounded-lg w-full outline-none focus:border-phenikaa-blue focus:ring-1 focus:ring-phenikaa-blue transition">
+                        </td>
+                        <td class="p-2 text-center">
+                            <button id="btn-save-phone-${id}" onclick="window.savePhone('${id}', '${name}')" class="bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-4 py-1.5 rounded shadow-sm transition text-sm font-semibold">
+                                <i class="fas fa-save mr-1"></i> Lưu
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }
+            if(Object.keys(uniqueUsers).length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500">Chưa có Giảng viên nào đăng ký lịch để hiển thị danh bạ.</td></tr>`;
+            }
+        }
+
+        window.savePhone = async function(userId, userName) {
+            if(!isAdmin) return;
+            const phoneVal = document.getElementById(`phone-${userId}`).value.trim();
+            const btn = document.getElementById(`btn-save-phone-${userId}`);
+            const originalHtml = btn.innerHTML;
+            
+            try {
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i>...`;
+                btn.disabled = true;
+
+                // SetDoc (merge) cho phép tạo mới document nếu chưa có, hoặc cập nhật field nếu đã tồn tại
+                await setDoc(doc(db, "user_profiles", userId), { phone: phoneVal, name: userName }, { merge: true });
+                
+                // Hiệu ứng nút tạm thời
+                btn.innerHTML = `<i class="fas fa-check"></i> Xong`;
+                btn.classList.add('bg-green-600', 'text-white');
+                btn.classList.remove('bg-blue-100', 'text-blue-700');
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                    btn.classList.remove('bg-green-600', 'text-white');
+                    btn.classList.add('bg-blue-100', 'text-blue-700');
+                    btn.disabled = false;
+                }, 1500);
+            } catch(e) {
+                alert("Lỗi lưu số điện thoại: " + e.message);
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        }
+
+        function populateLecturerDropdown() {
+            const select = document.getElementById('filter-lecturer');
+            const currentValue = select.value; 
+            select.innerHTML = '<option value="all">-- Tất cả Giảng viên --</option>';
+
+            const uniqueUsers = {};
+            allSchedules.forEach(s => {
+                if (!uniqueUsers[s.userId]) {
+                    uniqueUsers[s.userId] = s.shortName || s.userName;
+                }
+            });
+
+            for (const [id, name] of Object.entries(uniqueUsers)) {
+                select.innerHTML += `<option value="${id}">${name}</option>`;
+            }
+            
+            if (uniqueUsers[currentValue] || currentValue === 'all') {
+                select.value = currentValue;
+            }
+        }
+
+        function renderPendingApprovals() {
+            const pendingList = document.getElementById('pending-list');
+            const emptyPending = document.getElementById('empty-pending');
+            const pendings = allSchedules.filter(s => s.status === 'Chờ duyệt');
+            
+            pendingList.innerHTML = '';
+            if(pendings.length === 0) {
+                emptyPending.classList.remove('hidden');
+            } else {
+                emptyPending.classList.add('hidden');
+                pendings.forEach(item => {
+                    const dateStr = item.date.split('-').reverse().join('/');
+                    pendingList.innerHTML += `
+                        <li class="py-3 flex justify-between items-center group border-b border-gray-50 last:border-0">
+                            <div>
+                                <div class="font-bold text-gray-800">${item.shortName || item.userName}</div>
+                                <div class="text-sm text-gray-500">Ca ${item.shift} - Ngày ${dateStr}</div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="window.approveSchedule('${item.id}')" class="bg-green-100 text-green-700 hover:bg-green-600 hover:text-white px-3 py-1.5 rounded shadow-sm transition text-sm font-medium">
+                                    <i class="fas fa-check"></i> Duyệt
+                                </button>
+                                <button onclick="window.deleteSchedule('${item.id}', '${item.userId}')" class="bg-red-100 text-red-700 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded shadow-sm transition text-sm font-medium" title="Từ chối (Xóa)">
+                                    <i class="fas fa-times"></i> Xóa
+                                </button>
+                            </div>
+                        </li>
+                    `;
+                });
+            }
+        }
+
+        window.approveSchedule = async function(docId) {
+            if (!isAdmin) {
+                alert("Lỗi: Chỉ Trưởng khoa mới có quyền duyệt lịch trực!");
+                return;
+            }
+            try {
+                await updateDoc(doc(db, "schedules", docId), { status: 'Đã duyệt' });
+            } catch(e) { alert("Lỗi duyệt: " + e.message); }
+        }
+
+        // 3.2. Bảng Thống Kê Giờ
+        window.generateReport = function() {
+            const start = document.getElementById('filter-start').value;
+            const end = document.getElementById('filter-end').value;
+            const lecturerId = document.getElementById('filter-lecturer').value;
+            
+            if(!start || !end) { alert('Vui lòng chọn Từ ngày và Đến ngày'); return; }
+
+            const validData = allSchedules.filter(s => {
+                let isValid = (s.status === 'Đã duyệt' && s.date >= start && s.date <= end);
+                if (lecturerId !== 'all') {
+                    isValid = isValid && (s.userId === lecturerId);
+                }
+                return isValid;
+            });
+
+            const reportMap = {};
+            validData.forEach(item => {
+                if(!reportMap[item.userId]) {
+                    reportMap[item.userId] = { name: item.shortName || item.userName, count: 0 };
+                }
+                reportMap[item.userId].count += 1; 
+            });
+
+            const reportArray = Object.values(reportMap);
+            
+            const tbody = document.getElementById('report-table-body');
+            const printTbody = document.getElementById('print-table-body');
+            tbody.innerHTML = ''; printTbody.innerHTML = '';
+
+            if(reportArray.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-500">Không có dữ liệu trong khoảng thời gian/tiêu chí này.</td></tr>`;
+            } else {
+                reportArray.forEach((row, idx) => {
+                    const hours = row.count * 4; 
+                    
+                    tbody.innerHTML += `
+                        <tr class="border-b">
+                            <td class="p-2 text-center">${idx + 1}</td>
+                            <td class="p-2 font-semibold text-gray-800">${row.name}</td>
+                            <td class="p-2 text-center text-blue-600 font-bold">${row.count}</td>
+                            <td class="p-2 text-center text-phenikaa-orange font-bold">${hours}</td>
+                        </tr>
+                    `;
+
+                    printTbody.innerHTML += `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td style="text-align: left;">${row.name}</td>
+                            <td>${row.count}</td>
+                            <td>${hours}</td>
+                            <td></td>
+                        </tr>
+                    `;
+                });
+            }
+
+            document.getElementById('report-container').classList.remove('hidden');
+            
+            const sStr = start.split('-').reverse().join('/');
+            const eStr = end.split('-').reverse().join('/');
+            
+            let printHeaderExt = "";
+            if(lecturerId !== 'all') {
+                const lecturerName = document.querySelector(`#filter-lecturer option[value="${lecturerId}"]`).text;
+                printHeaderExt = `<br><span style="font-size: 15px;">(Thống kê riêng cho: ${lecturerName})</span>`;
+            }
+
+            document.getElementById('print-date-range').innerHTML = `Từ ngày: ${sStr} - Đến ngày: ${eStr}${printHeaderExt}`;
+            
+            // Cập nhật ngày tháng in tự động
+            const today = new Date();
+            document.getElementById('print-current-date').innerText = `Hà Nội, Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`;
+        }
+
+        window.printReport = function() {
+            window.print();
+        }
+
+    </script>
+</body>
+</html>
