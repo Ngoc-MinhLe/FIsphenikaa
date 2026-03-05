@@ -236,6 +236,7 @@
                                 <div class="mb-4">
                                     <label class="block text-sm font-semibold text-gray-700 mb-1">Ngày trực <span class="text-red-500">*</span></label>
                                     <input type="date" id="input-date" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-phenikaa-blue outline-none transition">
+                                    <p class="text-xs text-orange-600 mt-1 italic"><i class="fas fa-info-circle"></i> Chỉ đăng ký từ ngày hiện tại (yêu cầu đăng ký trước 1 ngày).</p>
                                 </div>
                                 <div class="mb-4">
                                     <label class="block text-sm font-semibold text-gray-700 mb-1">Ca trực <span class="text-red-500">*</span></label>
@@ -243,7 +244,6 @@
                                         <option value="">-- Chọn ca trực --</option>
                                         <option value="Sáng">Sáng</option>
                                         <option value="Chiều">Chiều</option>
-                                        <!-- Tùy chọn mới cho đăng ký 2 ca cùng lúc -->
                                         <option value="Cả ngày">Cả ngày (Sáng & Chiều)</option>
                                     </select>
                                 </div>
@@ -273,9 +273,12 @@
                                     <label class="block text-xs text-gray-500 mb-1">Đến ngày</label>
                                     <input type="date" id="my-filter-end" class="w-full px-3 py-1.5 text-sm border rounded outline-none">
                                 </div>
-                                <div class="flex items-end">
+                                <div class="flex items-end gap-2">
                                     <button onclick="window.renderMyScheduleTable()" class="w-full sm:w-auto bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-1.5 text-sm rounded shadow-sm transition font-medium">
                                         <i class="fas fa-filter mr-1"></i> Lọc
+                                    </button>
+                                    <button onclick="window.printMySchedule()" class="w-full sm:w-auto bg-phenikaa-orange hover:bg-orange-600 text-white px-4 py-1.5 text-sm rounded shadow-sm transition font-medium flex items-center justify-center" title="Chỉ in các ca Đã duyệt">
+                                        <i class="fas fa-print mr-1"></i> In Thống Kê
                                     </button>
                                 </div>
                             </div>
@@ -410,14 +413,14 @@
             </div>
 
             <h2 style="text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 20px;">
-                Tổng hợp lịch trực Khoa - Khoa HTT<br>
+                <span id="print-title-text">Tổng hợp lịch trực Khoa - Khoa HTT Kỳ 2</span><br>
                 <span id="print-date-range" style="font-size: 14px; font-weight: normal;"></span>
             </h2>
             <table class="print-table">
                 <thead>
                     <tr>
                         <th style="width: 50px;">stt</th>
-                        <th>họ tên</th>
+                        <th id="print-col-2-title">họ tên</th>
                         <th>số buổi trực</th>
                         <th>Giờ quy đổi</th>
                         <th>ghi chú</th>
@@ -427,10 +430,8 @@
                     <!-- Data here -->
                 </tbody>
             </table>
-            <div class="signature-area">
-                <p id="print-current-date">Hà Nội, Ngày ....... tháng ....... năm .......</p>
-                <p style="font-weight: bold; margin-bottom: 60px;">TRƯỞNG KHOA</p>
-                <p style="font-weight: bold;">TS.TRỊNH THANH BÌNH</p>
+            <div class="signature-area" id="print-signature-area">
+                <!-- Nội dung chữ ký render qua JS -->
             </div>
         </div>
 
@@ -461,7 +462,7 @@
         // CẤU HÌNH PHÂN QUYỀN TRƯỞNG KHOA / QUẢN TRỊ VIÊN
         // -------------------------------------------------------------
         const ADMIN_EMAILS = [
-            'binh.trinhthanh@phenikaa-uni.edu.vn',
+            'trinhthanhbinh@phenikaa-uni.edu.vn',
             'minhln@dhhp.edu.vn',
         ];
 
@@ -516,6 +517,11 @@
                     
                     document.getElementById('my-filter-start').value = startOfMonth;
                     document.getElementById('my-filter-end').value = endOfMonth;
+
+                    // Giới hạn input-date không cho chọn ngày quá khứ (tối thiểu là hôm nay)
+                    const d = new Date();
+                    const todayStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                    document.getElementById('input-date').setAttribute('min', todayStr);
 
                     window.showView('dashboard');
                     fetchAllData(); 
@@ -597,7 +603,7 @@
         }
 
         // ==========================================
-        // 1. CHỨC NĂNG LỊCH CÁ NHÂN
+        // 1. CHỨC NĂNG LỊCH CÁ NHÂN & IN THỐNG KÊ
         // ==========================================
         window.renderMyScheduleTable = function() {
             document.getElementById('loading-schedule').classList.add('hidden');
@@ -644,6 +650,82 @@
                 });
             }
         };
+
+        // Hàm in báo cáo thống kê cá nhân
+        window.printMySchedule = function() {
+            const startDate = document.getElementById('my-filter-start').value;
+            const endDate = document.getElementById('my-filter-end').value;
+
+            // Chỉ lấy các ca của người này và đã được duyệt để in
+            let mySchedules = allSchedules.filter(s => s.userId === currentUser.uid && s.status === 'Đã duyệt');
+
+            if (startDate) mySchedules = mySchedules.filter(s => s.date >= startDate);
+            if (endDate) mySchedules = mySchedules.filter(s => s.date <= endDate);
+
+            mySchedules.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            if(mySchedules.length === 0) {
+                alert("Không có lịch trực nào (Đã duyệt) trong khoảng thời gian này để in.");
+                return;
+            }
+
+            const printTbody = document.getElementById('print-table-body');
+            printTbody.innerHTML = '';
+            let totalHours = 0;
+
+            mySchedules.forEach((item, idx) => {
+                const dateStr = item.date.split('-').reverse().join('/');
+                const hours = 4;
+                totalHours += hours;
+                
+                printTbody.innerHTML += `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td style="text-align: left;">Ngày ${dateStr} - Ca ${item.shift}</td>
+                        <td>1</td>
+                        <td>${hours}</td>
+                        <td>${item.note || ''}</td>
+                    </tr>
+                `;
+            });
+            
+            // Hàng tính tổng
+            printTbody.innerHTML += `
+                <tr style="font-weight: bold; background-color: #f9fafb;">
+                    <td colspan="2" style="text-align: right;">Tổng cộng:</td>
+                    <td>${mySchedules.length}</td>
+                    <td>${totalHours}</td>
+                    <td></td>
+                </tr>
+            `;
+
+            // Thay đổi Tiêu đề và Cột cho phù hợp bản in cá nhân
+            document.getElementById('print-col-2-title').innerText = "chi tiết ca trực";
+            document.getElementById('print-title-text').innerText = "Thống kê lịch trực cá nhân";
+            
+            const sStr = startDate ? startDate.split('-').reverse().join('/') : '...';
+            const eStr = endDate ? endDate.split('-').reverse().join('/') : '...';
+            document.getElementById('print-date-range').innerHTML = `Từ ngày: ${sStr} - Đến ngày: ${eStr}<br><span style="font-size: 15px;">(Giảng viên: ${currentUser.shortName})</span>`;
+            
+            // Thiết lập vùng chữ ký cho bản in cá nhân
+            const signatureArea = document.getElementById('print-signature-area');
+            const today = new Date();
+            signatureArea.innerHTML = `
+                <p style="text-align: right; padding-right: 50px;">Hà Nội, Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}</p>
+                <div style="display: flex; justify-content: space-between; margin-top: 20px; padding: 0 50px;">
+                    <div style="text-align: center;">
+                        <p style="font-weight: bold; margin-bottom: 60px;">NGƯỜI LẬP BẢNG</p>
+                        <p style="font-weight: bold;">${currentUser.shortName}</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <p style="font-weight: bold; margin-bottom: 60px;">TRƯỞNG KHOA</p>
+                        <p style="font-weight: bold;">TRỊNH THANH BÌNH</p>
+                    </div>
+                </div>
+            `;
+
+            window.print();
+        }
 
         document.getElementById('form-schedule').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -896,7 +978,7 @@
             } catch(e) { alert("Lỗi duyệt: " + e.message); }
         }
 
-        // 3.2. Bảng Thống Kê Giờ
+        // 3.2. Bảng Thống Kê Giờ (Dành cho Admin)
         window.generateReport = function() {
             const start = document.getElementById('filter-start').value;
             const end = document.getElementById('filter-end').value;
@@ -955,6 +1037,10 @@
 
             document.getElementById('report-container').classList.remove('hidden');
             
+            // Thiết lập tiêu đề và chữ ký cho Bản in Tổng hợp của Admin
+            document.getElementById('print-col-2-title').innerText = "họ tên";
+            document.getElementById('print-title-text').innerText = "Tổng hợp lịch trực Khoa - Khoa HTT Kỳ 2";
+            
             const sStr = start.split('-').reverse().join('/');
             const eStr = end.split('-').reverse().join('/');
             
@@ -966,9 +1052,15 @@
 
             document.getElementById('print-date-range').innerHTML = `Từ ngày: ${sStr} - Đến ngày: ${eStr}${printHeaderExt}`;
             
-            // Cập nhật ngày tháng in tự động
+            const signatureArea = document.getElementById('print-signature-area');
             const today = new Date();
-            document.getElementById('print-current-date').innerText = `Hà Nội, Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`;
+            signatureArea.innerHTML = `
+                <p style="text-align: right; padding-right: 50px;">Hà Nội, Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}</p>
+                <div style="text-align: right; padding-right: 50px; margin-top: 20px;">
+                    <p style="font-weight: bold; margin-bottom: 60px;">TRƯỞNG KHOA</p>
+                    <p style="font-weight: bold;">TRỊNH THANH BÌNH</p>
+                </div>
+            `;
         }
 
         window.printReport = function() {
