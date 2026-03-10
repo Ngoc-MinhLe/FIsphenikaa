@@ -831,97 +831,36 @@
                     { v: "STT", s: headerStyle },
                     { v: "Ngày trực", s: headerStyle },
                     { v: "Ca trực", s: headerStyle },
-                    { v: "Giờ quy đổi", s: headerStyle },
                     { v: "Ghi chú", s: headerStyle },
                     { v: "Trạng thái", s: headerStyle }
                 ]
             ];
 
-            let totalHours = 0;
             mySchedules.forEach((item, idx) => {
                 const dateStr = item.date.split('-').reverse().join('/');
-                const hours = 4;
-                totalHours += hours;
                 data.push([
                     { v: idx + 1, t: 'n', s: centerStyle },
                     { v: dateStr, t: 's', s: centerStyle },
                     { v: item.shift, t: 's', s: centerStyle },
-                    { v: hours, t: 'n', s: centerStyle },
                     { v: item.note || "", t: 's', s: cellStyle },
                     { v: item.status, t: 's', s: centerStyle }
                 ]);
             });
-
-            // --- DÒNG TỔNG CỘNG ---
-            const totalStyle = { font: { bold: true }, alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
-            data.push([
-                { v: "Tổng cộng", s: totalStyle },
-                { v: "", s: totalStyle },
-                { v: "", s: totalStyle },
-                { v: totalHours, t: 'n', s: totalStyle },
-                { v: "", s: totalStyle },
-                { v: "", s: totalStyle }
-            ]);
-
-            // --- PHẦN CHỮ KÝ ---
-            const today = new Date();
-            data.push([]); // Dòng trống
-            data.push([]); // Dòng trống
-
-            // Ngày tháng (Căn phải)
-            data.push([
-                { v: "", s: {} }, { v: "", s: {} }, { v: "", s: {} }, { v: "", s: {} },
-                { v: `Hà Nội, Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`, s: { font: { italic: true }, alignment: { horizontal: "center" } } },
-                { v: "", s: {} }
-            ]);
-
-            // Chức danh
-            data.push([
-                { v: "NGƯỜI LẬP BẢNG", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
-                { v: "", s: {} }, { v: "", s: {} }, { v: "", s: {} },
-                { v: "TRƯỞNG KHOA", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
-                { v: "", s: {} }
-            ]);
-
-            // Khoảng trống ký tên
-            data.push([]); data.push([]); data.push([]);
-
-            // Tên người ký
-            data.push([
-                { v: currentUser.shortName, s: { font: { bold: true }, alignment: { horizontal: "center" } } },
-                { v: "", s: {} }, { v: "", s: {} }, { v: "", s: {} },
-                { v: "TRỊNH THANH BÌNH", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
-                { v: "", s: {} }
-            ]);
 
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(data);
 
             // Gộp ô (Merge)
             ws['!merges'] = [
-                { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, // Trường
-                { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }, // Khoa
-                { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } }, // Tiêu đề
-                { s: { r: 4, c: 0 }, e: { r: 4, c: 5 } }, // Tên GV
-                { s: { r: 5, c: 0 }, e: { r: 5, c: 5 } }, // Ngày tháng (Header)
-                
-                // Merge dòng Tổng cộng (3 ô đầu)
-                { s: { r: data.length - 9, c: 0 }, e: { r: data.length - 9, c: 2 } },
-
-                // Merge Chữ ký (Ngày tháng)
-                { s: { r: data.length - 6, c: 4 }, e: { r: data.length - 6, c: 5 } },
-                // Merge Chữ ký (Người lập bảng)
-                { s: { r: data.length - 5, c: 0 }, e: { r: data.length - 5, c: 1 } },
-                // Merge Chữ ký (Trưởng khoa)
-                { s: { r: data.length - 5, c: 4 }, e: { r: data.length - 5, c: 5 } },
-                // Merge Tên (Người lập bảng)
-                { s: { r: data.length - 1, c: 0 }, e: { r: data.length - 1, c: 1 } },
-                // Merge Tên (Trưởng khoa)
-                { s: { r: data.length - 1, c: 4 }, e: { r: data.length - 1, c: 5 } }
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // Trường
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }, // Khoa
+                { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } }, // Tiêu đề
+                { s: { r: 4, c: 0 }, e: { r: 4, c: 4 } }, // Tên GV
+                { s: { r: 5, c: 0 }, e: { r: 5, c: 4 } }  // Ngày tháng
             ];
             
             // Độ rộng cột
-            ws['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 15 }];
+            ws['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 10 }, { wch: 30 }, { wch: 15 }];
 
             XLSX.utils.book_append_sheet(wb, ws, "LichCaNhan");
             XLSX.writeFile(wb, `Lich_Ca_Nhan_${currentUser.shortName}.xlsx`);
@@ -1334,58 +1273,14 @@
                 ]
             ];
 
-            let totalShifts = 0;
-            let totalHours = 0;
-
             Object.values(reportMap).forEach((row, idx) => {
-                const hours = row.count * 4;
-                totalShifts += row.count;
-                totalHours += hours;
                 data.push([
                     { v: idx + 1, t: 'n', s: centerStyle },
                     { v: row.name, t: 's', s: cellStyle },
                     { v: row.count, t: 'n', s: centerStyle },
-                    { v: hours, t: 'n', s: centerStyle }
+                    { v: row.count * 4, t: 'n', s: centerStyle }
                 ]);
             });
-
-            // --- DÒNG TỔNG CỘNG ---
-            const totalStyle = { font: { bold: true }, alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
-            data.push([
-                { v: "Tổng cộng", s: totalStyle },
-                { v: "", s: totalStyle },
-                { v: totalShifts, t: 'n', s: totalStyle },
-                { v: totalHours, t: 'n', s: totalStyle }
-            ]);
-
-            // --- PHẦN CHỮ KÝ ---
-            const today = new Date();
-            data.push([]); // Dòng trống
-            data.push([]); // Dòng trống
-
-            // Ngày tháng
-            data.push([
-                { v: "", s: {} }, { v: "", s: {} },
-                { v: `Hà Nội, Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`, s: { font: { italic: true }, alignment: { horizontal: "center" } } },
-                { v: "", s: {} }
-            ]);
-
-            // Chức danh
-            data.push([
-                { v: "", s: {} }, { v: "", s: {} },
-                { v: "TRƯỞNG KHOA", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
-                { v: "", s: {} }
-            ]);
-
-            // Khoảng trống ký tên
-            data.push([]); data.push([]); data.push([]);
-
-            // Tên Trưởng khoa
-            data.push([
-                { v: "", s: {} }, { v: "", s: {} },
-                { v: "TRỊNH THANH BÌNH", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
-                { v: "", s: {} }
-            ]);
 
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(data);
@@ -1395,17 +1290,7 @@
                 { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, 
                 { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
                 { s: { r: 3, c: 0 }, e: { r: 3, c: 3 } }, 
-                { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
-                
-                // Merge dòng Tổng cộng (2 ô đầu)
-                { s: { r: data.length - 9, c: 0 }, e: { r: data.length - 9, c: 1 } },
-
-                // Merge Chữ ký (Ngày tháng)
-                { s: { r: data.length - 6, c: 2 }, e: { r: data.length - 6, c: 3 } },
-                // Merge Chữ ký (Trưởng khoa)
-                { s: { r: data.length - 5, c: 2 }, e: { r: data.length - 5, c: 3 } },
-                // Merge Tên (Trưởng khoa)
-                { s: { r: data.length - 1, c: 2 }, e: { r: data.length - 1, c: 3 } }
+                { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } }
             ];
             
             // Độ rộng cột
