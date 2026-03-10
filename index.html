@@ -245,7 +245,11 @@
                                     <label class="text-xs text-gray-500 font-semibold">Tên hiển thị (Trên lưới & Báo cáo)</label>
                                     <input type="text" id="my-display-name" class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-phenikaa-blue outline-none" placeholder="Vd: Nguyễn Văn A">
                                 </div>
-                                <button onclick="window.saveMyProfile()" class="w-full bg-gray-100 hover:bg-phenikaa-blue hover:text-white text-gray-700 font-semibold py-2 rounded-lg transition text-sm">Cập nhật tên</button>
+                                <div>
+                                    <label class="text-xs text-gray-500 font-semibold">Số điện thoại</label>
+                                    <input type="text" id="my-phone-number" class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-phenikaa-blue outline-none" placeholder="Vd: 0987654321">
+                                </div>
+                                <button onclick="window.saveMyProfile()" class="w-full bg-gray-100 hover:bg-phenikaa-blue hover:text-white text-gray-700 font-semibold py-2 rounded-lg transition text-sm">Cập nhật thông tin</button>
                             </div>
                         </div>
 
@@ -615,10 +619,15 @@
                 });
                 
                 // Cập nhật lại tên hiển thị của user hiện tại nếu có trong DB
-                if (userProfiles[currentUser.uid]?.displayName) {
-                    currentUser.shortName = userProfiles[currentUser.uid].displayName;
-                    document.getElementById('user-name').textContent = currentUser.shortName;
-                    document.getElementById('my-display-name').value = currentUser.shortName;
+                const myProfile = userProfiles[currentUser.uid];
+                if (myProfile) {
+                    if (myProfile.displayName) {
+                        currentUser.shortName = myProfile.displayName;
+                        document.getElementById('user-name').textContent = currentUser.shortName;
+                        document.getElementById('my-display-name').value = currentUser.shortName;
+                    }
+                    // Tự động điền số điện thoại nếu có
+                    if (myProfile.phone) document.getElementById('my-phone-number').value = myProfile.phone;
                 }
 
                 renderWeeklyGrid();
@@ -657,10 +666,11 @@
         // ==========================================
         window.saveMyProfile = async function() {
             const newName = document.getElementById('my-display-name').value.trim();
+            const newPhone = document.getElementById('my-phone-number').value.trim();
             if(!newName) return alert("Vui lòng nhập tên hiển thị!");
 
             try {
-                await setDoc(doc(db, "user_profiles", currentUser.uid), { displayName: newName }, { merge: true });
+                await setDoc(doc(db, "user_profiles", currentUser.uid), { displayName: newName, phone: newPhone }, { merge: true });
                 alert("Cập nhật thông tin thành công!");
             } catch(e) {
                 alert("Lỗi: " + e.message);
