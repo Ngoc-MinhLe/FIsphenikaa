@@ -12,7 +12,7 @@
     <!-- Tích hợp FontAwesome cho icon -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Tích hợp SheetJS để xuất Excel -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     
     <!-- Cấu hình màu sắc tùy chỉnh cho Phenikaa -->
     <script>
@@ -245,7 +245,11 @@
                                     <label class="text-xs text-gray-500 font-semibold">Tên hiển thị (Trên lưới & Báo cáo)</label>
                                     <input type="text" id="my-display-name" class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-phenikaa-blue outline-none" placeholder="Vd: Nguyễn Văn A">
                                 </div>
-                                <button onclick="window.saveMyProfile()" class="w-full bg-gray-100 hover:bg-phenikaa-blue hover:text-white text-gray-700 font-semibold py-2 rounded-lg transition text-sm">Cập nhật tên</button>
+                                <div>
+                                    <label class="text-xs text-gray-500 font-semibold">Số điện thoại</label>
+                                    <input type="text" id="my-phone-number" class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-phenikaa-blue outline-none" placeholder="Vd: 0987654321">
+                                </div>
+                                <button onclick="window.saveMyProfile()" class="w-full bg-gray-100 hover:bg-phenikaa-blue hover:text-white text-gray-700 font-semibold py-2 rounded-lg transition text-sm">Cập nhật thông tin</button>
                             </div>
                         </div>
 
@@ -615,10 +619,15 @@
                 });
                 
                 // Cập nhật lại tên hiển thị của user hiện tại nếu có trong DB
-                if (userProfiles[currentUser.uid]?.displayName) {
-                    currentUser.shortName = userProfiles[currentUser.uid].displayName;
-                    document.getElementById('user-name').textContent = currentUser.shortName;
-                    document.getElementById('my-display-name').value = currentUser.shortName;
+                const myProfile = userProfiles[currentUser.uid];
+                if (myProfile) {
+                    if (myProfile.displayName) {
+                        currentUser.shortName = myProfile.displayName;
+                        document.getElementById('user-name').textContent = currentUser.shortName;
+                        document.getElementById('my-display-name').value = currentUser.shortName;
+                    }
+                    // Tự động điền số điện thoại nếu có
+                    if (myProfile.phone) document.getElementById('my-phone-number').value = myProfile.phone;
                 }
 
                 renderWeeklyGrid();
@@ -657,10 +666,11 @@
         // ==========================================
         window.saveMyProfile = async function() {
             const newName = document.getElementById('my-display-name').value.trim();
+            const newPhone = document.getElementById('my-phone-number').value.trim();
             if(!newName) return alert("Vui lòng nhập tên hiển thị!");
 
             try {
-                await setDoc(doc(db, "user_profiles", currentUser.uid), { displayName: newName }, { merge: true });
+                await setDoc(doc(db, "user_profiles", currentUser.uid), { displayName: newName, phone: newPhone }, { merge: true });
                 alert("Cập nhật thông tin thành công!");
             } catch(e) {
                 alert("Lỗi: " + e.message);
@@ -798,29 +808,130 @@
             const endDate = document.getElementById('my-filter-end').value;
 
             let mySchedules = allSchedules.filter(s => s.userId === currentUser.uid);
-
             if (startDate) mySchedules = mySchedules.filter(s => s.date >= startDate);
             if (endDate) mySchedules = mySchedules.filter(s => s.date <= endDate);
-
             mySchedules.sort((a, b) => new Date(a.date) - new Date(b.date));
 
             if (mySchedules.length === 0) return alert("Không có dữ liệu để xuất Excel!");
 
-            // Chuẩn bị dữ liệu
+            // --- ĐỊNH DẠNG STYLE ---
+            const titleStyle = { font: { bold: true, sz: 14, color: { rgb: "00205B" } }, alignment: { horizontal: "center" } };
+            const headerStyle = { 
+                font: { bold: true, color: { rgb: "FFFFFF" } }, 
+                fill: { fgColor: { rgb: "00205B" } }, 
+                alignment: { horizontal: "center", vertical: "center" }, 
+                border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } 
+            };
+            const cellStyle = { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+            const centerStyle = { ...cellStyle, alignment: { horizontal: "center" } };
+
+            // --- CHUẨN BỊ DỮ LIỆU ---
+            const sStr = startDate ? startDate.split('-').reverse().join('/') : '...';
+            const eStr = endDate ? endDate.split('-').reverse().join('/') : '...';
+            
             const data = [
-                ["STT", "Ngày trực", "Ca trực", "Ghi chú", "Trạng thái"]
+                [{ v: "TRƯỜNG ĐẠI HỌC PHENIKAA", s: { font: { bold: true }, alignment: { horizontal: "center" } } }],
+                [{ v: "KHOA CÔNG NGHỆ THÔNG TIN", s: { font: { bold: true }, alignment: { horizontal: "center" } } }],
+                [],
+                [{ v: "LỊCH TRỰC CÁ NHÂN", s: titleStyle }],
+                [{ v: `Giảng viên: ${currentUser.shortName}`, s: { font: { bold: true }, alignment: { horizontal: "center" } } }],
+                [{ v: `Từ ngày: ${sStr} - Đến ngày: ${eStr}`, s: { font: { italic: true }, alignment: { horizontal: "center" } } }],
+                [],
+                [
+                    { v: "STT", s: headerStyle },
+                    { v: "Ngày trực", s: headerStyle },
+                    { v: "Ca trực", s: headerStyle },
+                    { v: "Giờ quy đổi", s: headerStyle },
+                    { v: "Ghi chú", s: headerStyle },
+                    { v: "Trạng thái", s: headerStyle }
+                ]
             ];
 
+            let totalHours = 0;
             mySchedules.forEach((item, idx) => {
                 const dateStr = item.date.split('-').reverse().join('/');
-                data.push([idx + 1, dateStr, item.shift, item.note || "", item.status]);
+                const hours = 4;
+                totalHours += hours;
+                data.push([
+                    { v: idx + 1, t: 'n', s: centerStyle },
+                    { v: dateStr, t: 's', s: centerStyle },
+                    { v: item.shift, t: 's', s: centerStyle },
+                    { v: hours, t: 'n', s: centerStyle },
+                    { v: item.note || "", t: 's', s: cellStyle },
+                    { v: item.status, t: 's', s: centerStyle }
+                ]);
             });
+
+            // --- DÒNG TỔNG CỘNG ---
+            const totalStyle = { font: { bold: true }, alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+            data.push([
+                { v: "Tổng cộng", s: totalStyle },
+                { v: "", s: totalStyle },
+                { v: "", s: totalStyle },
+                { v: totalHours, t: 'n', s: totalStyle },
+                { v: "", s: totalStyle },
+                { v: "", s: totalStyle }
+            ]);
+
+            // --- PHẦN CHỮ KÝ ---
+            const today = new Date();
+            data.push([]); // Dòng trống
+            data.push([]); // Dòng trống
+
+            // Ngày tháng (Căn phải)
+            data.push([
+                { v: "", s: {} }, { v: "", s: {} }, { v: "", s: {} }, { v: "", s: {} },
+                { v: `Hà Nội, Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`, s: { font: { italic: true }, alignment: { horizontal: "center" } } },
+                { v: "", s: {} }
+            ]);
+
+            // Chức danh
+            data.push([
+                { v: "NGƯỜI LẬP BẢNG", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
+                { v: "", s: {} }, { v: "", s: {} }, { v: "", s: {} },
+                { v: "TRƯỞNG KHOA", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
+                { v: "", s: {} }
+            ]);
+
+            // Khoảng trống ký tên
+            data.push([]); data.push([]); data.push([]);
+
+            // Tên người ký
+            data.push([
+                { v: currentUser.shortName, s: { font: { bold: true }, alignment: { horizontal: "center" } } },
+                { v: "", s: {} }, { v: "", s: {} }, { v: "", s: {} },
+                { v: "TRỊNH THANH BÌNH", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
+                { v: "", s: {} }
+            ]);
 
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(data);
+
+            // Gộp ô (Merge)
+            ws['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, // Trường
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }, // Khoa
+                { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } }, // Tiêu đề
+                { s: { r: 4, c: 0 }, e: { r: 4, c: 5 } }, // Tên GV
+                { s: { r: 5, c: 0 }, e: { r: 5, c: 5 } }, // Ngày tháng (Header)
+                
+                // Merge dòng Tổng cộng (3 ô đầu)
+                { s: { r: data.length - 9, c: 0 }, e: { r: data.length - 9, c: 2 } },
+
+                // Merge Chữ ký (Ngày tháng)
+                { s: { r: data.length - 6, c: 4 }, e: { r: data.length - 6, c: 5 } },
+                // Merge Chữ ký (Người lập bảng)
+                { s: { r: data.length - 5, c: 0 }, e: { r: data.length - 5, c: 1 } },
+                // Merge Chữ ký (Trưởng khoa)
+                { s: { r: data.length - 5, c: 4 }, e: { r: data.length - 5, c: 5 } },
+                // Merge Tên (Người lập bảng)
+                { s: { r: data.length - 1, c: 0 }, e: { r: data.length - 1, c: 1 } },
+                // Merge Tên (Trưởng khoa)
+                { s: { r: data.length - 1, c: 4 }, e: { r: data.length - 1, c: 5 } }
+            ];
             
             // Độ rộng cột
-            ws['!cols'] = [{wch: 5}, {wch: 15}, {wch: 10}, {wch: 30}, {wch: 15}];
+            ws['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 15 }];
 
             XLSX.utils.book_append_sheet(wb, ws, "LichCaNhan");
             XLSX.writeFile(wb, `Lich_Ca_Nhan_${currentUser.shortName}.xlsx`);
@@ -1180,12 +1291,9 @@
             const end = document.getElementById('filter-end').value;
             const lecturerId = document.getElementById('filter-lecturer').value;
             
-            // Tái sử dụng logic lọc dữ liệu giống generateReport
             const validData = allSchedules.filter(s => {
                 let isValid = (s.status === 'Đã duyệt' && s.date >= start && s.date <= end);
-                if (lecturerId !== 'all') {
-                    isValid = isValid && (s.userId === lecturerId);
-                }
+                if (lecturerId !== 'all') isValid = isValid && (s.userId === lecturerId);
                 return isValid;
             });
 
@@ -1200,25 +1308,120 @@
                 reportMap[item.userId].count += 1; 
             });
 
-            // Chuẩn bị dữ liệu cho Excel
-            const dataForExcel = [
-                ["STT", "Họ và Tên", "Số buổi trực", "Giờ quy đổi"] // Header
+            // --- ĐỊNH DẠNG STYLE ---
+            const titleStyle = { font: { bold: true, sz: 14, color: { rgb: "00205B" } }, alignment: { horizontal: "center" } };
+            const headerStyle = { 
+                font: { bold: true, color: { rgb: "FFFFFF" } }, 
+                fill: { fgColor: { rgb: "00205B" } }, 
+                alignment: { horizontal: "center", vertical: "center" }, 
+                border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } 
+            };
+            const cellStyle = { border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+            const centerStyle = { ...cellStyle, alignment: { horizontal: "center" } };
+
+            // --- CHUẨN BỊ DỮ LIỆU ---
+            const sStr = start.split('-').reverse().join('/');
+            const eStr = end.split('-').reverse().join('/');
+            let reportTitle = "TỔNG HỢP LỊCH TRỰC KHOA - KHOA HTT";
+            let dateRangeText = `Từ ngày: ${sStr} - Đến ngày: ${eStr}`;
+            if (lecturerId !== 'all') {
+                const lecturerName = document.querySelector(`#filter-lecturer option[value="${lecturerId}"]`).text;
+                dateRangeText += ` (Thống kê riêng cho: ${lecturerName})`;
+            }
+
+            const data = [
+                [{ v: "TRƯỜNG ĐẠI HỌC PHENIKAA", s: { font: { bold: true }, alignment: { horizontal: "center" } } }],
+                [{ v: "KHOA CÔNG NGHỆ THÔNG TIN", s: { font: { bold: true }, alignment: { horizontal: "center" } } }],
+                [],
+                [{ v: reportTitle, s: titleStyle }],
+                [{ v: dateRangeText, s: { font: { italic: true }, alignment: { horizontal: "center" } } }],
+                [],
+                [
+                    { v: "STT", s: headerStyle }, 
+                    { v: "Họ và Tên", s: headerStyle },
+                    { v: "Số buổi trực", s: headerStyle }, 
+                    { v: "Giờ quy đổi", s: headerStyle }
+                ]
             ];
 
+            let totalShifts = 0;
+            let totalHours = 0;
+
             Object.values(reportMap).forEach((row, idx) => {
-                dataForExcel.push([idx + 1, row.name, row.count, row.count * 4]);
+                const hours = row.count * 4;
+                totalShifts += row.count;
+                totalHours += hours;
+                data.push([
+                    { v: idx + 1, t: 'n', s: centerStyle },
+                    { v: row.name, t: 's', s: cellStyle },
+                    { v: row.count, t: 'n', s: centerStyle },
+                    { v: hours, t: 'n', s: centerStyle }
+                ]);
             });
 
-            // Tạo Workbook và Worksheet
+            // --- DÒNG TỔNG CỘNG ---
+            const totalStyle = { font: { bold: true }, alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+            data.push([
+                { v: "Tổng cộng", s: totalStyle },
+                { v: "", s: totalStyle },
+                { v: totalShifts, t: 'n', s: totalStyle },
+                { v: totalHours, t: 'n', s: totalStyle }
+            ]);
+
+            // --- PHẦN CHỮ KÝ ---
+            const today = new Date();
+            data.push([]); // Dòng trống
+            data.push([]); // Dòng trống
+
+            // Ngày tháng
+            data.push([
+                { v: "", s: {} }, { v: "", s: {} },
+                { v: `Hà Nội, Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`, s: { font: { italic: true }, alignment: { horizontal: "center" } } },
+                { v: "", s: {} }
+            ]);
+
+            // Chức danh
+            data.push([
+                { v: "", s: {} }, { v: "", s: {} },
+                { v: "TRƯỞNG KHOA", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
+                { v: "", s: {} }
+            ]);
+
+            // Khoảng trống ký tên
+            data.push([]); data.push([]); data.push([]);
+
+            // Tên Trưởng khoa
+            data.push([
+                { v: "", s: {} }, { v: "", s: {} },
+                { v: "TRỊNH THANH BÌNH", s: { font: { bold: true }, alignment: { horizontal: "center" } } },
+                { v: "", s: {} }
+            ]);
+
             const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(dataForExcel);
+            const ws = XLSX.utils.aoa_to_sheet(data);
             
-            // Tự động điều chỉnh độ rộng cột (cơ bản)
+            // Gộp ô
+            ws['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, 
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+                { s: { r: 3, c: 0 }, e: { r: 3, c: 3 } }, 
+                { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
+                
+                // Merge dòng Tổng cộng (2 ô đầu)
+                { s: { r: data.length - 9, c: 0 }, e: { r: data.length - 9, c: 1 } },
+
+                // Merge Chữ ký (Ngày tháng)
+                { s: { r: data.length - 6, c: 2 }, e: { r: data.length - 6, c: 3 } },
+                // Merge Chữ ký (Trưởng khoa)
+                { s: { r: data.length - 5, c: 2 }, e: { r: data.length - 5, c: 3 } },
+                // Merge Tên (Trưởng khoa)
+                { s: { r: data.length - 1, c: 2 }, e: { r: data.length - 1, c: 3 } }
+            ];
+            
+            // Độ rộng cột
             ws['!cols'] = [{wch: 5}, {wch: 30}, {wch: 15}, {wch: 15}];
 
             XLSX.utils.book_append_sheet(wb, ws, "ThongKe");
-            
-            // Xuất file
             const fileName = `Thong_Ke_Lich_Truc_${start}_den_${end}.xlsx`;
             XLSX.writeFile(wb, fileName);
         }
