@@ -785,7 +785,7 @@ window.generateReport = function() {
     
     // Thiết lập tiêu đề và chữ ký cho Bản in Tổng hợp của Admin
     document.getElementById('print-col-2-title').innerText = "họ tên";
-    document.getElementById('print-title-text').innerText = "Tổng hợp lịch trực Khoa - Khoa HTT Kỳ 2";
+    document.getElementById('print-title-text').innerText = "Tổng hợp lịch trực Khoa - Khoa HTT";
     
     const sStr = start.split('-').reverse().join('/');
     const eStr = end.split('-').reverse().join('/');
