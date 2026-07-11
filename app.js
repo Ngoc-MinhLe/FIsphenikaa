@@ -32,6 +32,11 @@ let userProfiles = {}; // Lưu trữ số điện thoại của Giảng viên
 let currentWeekOffset = 0; 
 let unsubscribeSchedules = null;
 let unsubscribeProfiles = null;
+let reportSummaryPage = 1;
+let reportDetailPage = 1;
+const REPORT_PAGE_SIZE = 10;
+let lastReportSummaryRows = [];
+let lastReportDetailRows = [];
 
 const overlayLogin = document.getElementById('login-overlay');
 const appContainer = document.getElementById('app-container');
@@ -713,6 +718,94 @@ function renderPendingApprovals() {
     }
 }
 
+function renderPagination(containerId, totalItems, currentPage, pageSize, pageKey) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    if (totalItems <= pageSize) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const startItem = (currentPage - 1) * pageSize + 1;
+    const endItem = Math.min(currentPage * pageSize, totalItems);
+
+    container.innerHTML = `
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-2 text-sm text-gray-600">
+            <div>Hiển thị ${startItem}-${endItem} trên ${totalItems} dòng</div>
+            <div class="flex items-center gap-2">
+                <button onclick="window.changeReportPage('${pageKey}', -1)" class="px-3 py-1 rounded border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-100'}" ${currentPage === 1 ? 'disabled' : ''}>Trước</button>
+                <span class="px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold">${currentPage}/${totalPages}</span>
+                <button onclick="window.changeReportPage('${pageKey}', 1)" class="px-3 py-1 rounded border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-100'}" ${currentPage === totalPages ? 'disabled' : ''}>Sau</button>
+            </div>
+        </div>
+    `;
+}
+
+function renderReportTables() {
+    const tbody = document.getElementById('report-table-body');
+    const detailBody = document.getElementById('report-detail-body');
+    const detailContainer = document.getElementById('report-detail-container');
+
+    tbody.innerHTML = '';
+    detailBody.innerHTML = '';
+
+    if (lastReportSummaryRows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-gray-500">Không có dữ liệu trong khoảng thời gian/tiêu chí này.</td></tr>';
+        detailContainer.classList.add('hidden');
+        renderPagination('report-summary-pagination', 0, 1, REPORT_PAGE_SIZE, 'summary');
+        renderPagination('report-detail-pagination', 0, 1, REPORT_PAGE_SIZE, 'detail');
+        return;
+    }
+
+    const summaryPageRows = lastReportSummaryRows.slice((reportSummaryPage - 1) * REPORT_PAGE_SIZE, reportSummaryPage * REPORT_PAGE_SIZE);
+    const detailPageRows = lastReportDetailRows.slice((reportDetailPage - 1) * REPORT_PAGE_SIZE, reportDetailPage * REPORT_PAGE_SIZE);
+
+    summaryPageRows.forEach((row, idx) => {
+        const hours = row.count * 4;
+        tbody.innerHTML += `
+            <tr class="border-b">
+                <td class="p-2 text-center">${(reportSummaryPage - 1) * REPORT_PAGE_SIZE + idx + 1}</td>
+                <td class="p-2 font-semibold text-gray-800">${row.name}</td>
+                <td class="p-2 text-center text-blue-600 font-bold">${row.count}</td>
+                <td class="p-2 text-center text-phenikaa-orange font-bold">${hours}</td>
+            </tr>
+        `;
+    });
+
+    if (detailPageRows.length > 0) {
+        detailPageRows.forEach((row) => {
+            detailBody.innerHTML += `
+                <tr class="border-b">
+                    <td class="p-2 text-center">${row.index}</td>
+                    <td class="p-2 font-semibold text-gray-800">${row.name}</td>
+                    <td class="p-2 text-gray-700">${row.date}</td>
+                    <td class="p-2 text-center text-blue-600 font-semibold">${row.shift}</td>
+                    <td class="p-2 text-sm text-gray-600">${row.note || '-'}</td>
+                </tr>
+            `;
+        });
+        detailContainer.classList.remove('hidden');
+    } else {
+        detailContainer.classList.add('hidden');
+    }
+
+    renderPagination('report-summary-pagination', lastReportSummaryRows.length, reportSummaryPage, REPORT_PAGE_SIZE, 'summary');
+    renderPagination('report-detail-pagination', lastReportDetailRows.length, reportDetailPage, REPORT_PAGE_SIZE, 'detail');
+}
+
+window.changeReportPage = function(pageKey, delta) {
+    if (pageKey === 'summary') {
+        const totalPages = Math.max(1, Math.ceil(lastReportSummaryRows.length / REPORT_PAGE_SIZE));
+        reportSummaryPage = Math.min(totalPages, Math.max(1, reportSummaryPage + delta));
+    } else if (pageKey === 'detail') {
+        const totalPages = Math.max(1, Math.ceil(lastReportDetailRows.length / REPORT_PAGE_SIZE));
+        reportDetailPage = Math.min(totalPages, Math.max(1, reportDetailPage + delta));
+    }
+    renderReportTables();
+}
+
 window.approveSchedule = async function(docId) {
     if (!isAdmin) {
         alert("Lỗi: Chỉ Trưởng khoa mới có quyền duyệt lịch trực!");
@@ -759,12 +852,34 @@ window.generateReport = function() {
     });
 
     const reportArray = Object.values(reportMap);
-    
-    const tbody = document.getElementById('report-table-body');
-    const detailBody = document.getElementById('report-detail-body');
-    const detailContainer = document.getElementById('report-detail-container');
+    reportArray.forEach(row => {
+        row.sessions.sort((a, b) => new Date(a.date) - new Date(b.date));
+    });
+
+    lastReportSummaryRows = reportArray.map((row) => ({
+        name: row.name,
+        count: row.count,
+        hours: row.count * 4
+    }));
+
+    lastReportDetailRows = [];
+    reportArray.forEach((row, idx) => {
+        row.sessions.forEach((item, sessionIdx) => {
+            lastReportDetailRows.push({
+                index: `${idx + 1}.${sessionIdx + 1}`,
+                name: row.name,
+                date: item.date.split('-').reverse().join('/'),
+                shift: item.shift,
+                note: item.note || '-'
+            });
+        });
+    });
+
+    reportSummaryPage = 1;
+    reportDetailPage = 1;
+
     const printTbody = document.getElementById('print-table-body');
-    tbody.innerHTML = ''; detailBody.innerHTML = ''; printTbody.innerHTML = '';
+    printTbody.innerHTML = '';
 
     const printTitle = (printMode === 'detail-person' || printMode === 'detail-all')
         ? 'Chi tiết lịch trực Khoa - Khoa HTT'
@@ -772,20 +887,10 @@ window.generateReport = function() {
     document.getElementById('print-title-text').innerText = printTitle;
 
     if(reportArray.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-500">Không có dữ liệu trong khoảng thời gian/tiêu chí này.</td></tr>`;
-        detailContainer.classList.add('hidden');
+        printTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 8px;">Không có dữ liệu.</td></tr>';
     } else {
         reportArray.forEach((row, idx) => {
-            const hours = row.count * 4; 
-            
-            tbody.innerHTML += `
-                <tr class="border-b">
-                    <td class="p-2 text-center">${idx + 1}</td>
-                    <td class="p-2 font-semibold text-gray-800">${row.name}</td>
-                    <td class="p-2 text-center text-blue-600 font-bold">${row.count}</td>
-                    <td class="p-2 text-center text-phenikaa-orange font-bold">${hours}</td>
-                </tr>
-            `;
+            const hours = row.count * 4;
 
             if (printMode === 'detail-person' || printMode === 'detail-all') {
                 printTbody.innerHTML += `
@@ -808,25 +913,10 @@ window.generateReport = function() {
                     </tr>
                 `;
             }
-
-            row.sessions.sort((a, b) => new Date(a.date) - new Date(b.date));
-            row.sessions.forEach((item, sessionIdx) => {
-                const dateStr = item.date.split('-').reverse().join('/');
-                detailBody.innerHTML += `
-                    <tr class="border-b">
-                        <td class="p-2 text-center">${idx + 1}.${sessionIdx + 1}</td>
-                        <td class="p-2 font-semibold text-gray-800">${row.name}</td>
-                        <td class="p-2 text-gray-700">${dateStr}</td>
-                        <td class="p-2 text-center text-blue-600 font-semibold">${item.shift}</td>
-                        <td class="p-2 text-sm text-gray-600">${item.note || '-'}</td>
-                    </tr>
-                `;
-            });
         });
-
-        detailContainer.classList.remove('hidden');
     }
 
+    renderReportTables();
     document.getElementById('report-container').classList.remove('hidden');
     
     // Thiết lập tiêu đề và chữ ký cho Bản in của Admin
