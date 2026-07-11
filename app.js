@@ -728,11 +728,20 @@ window.generateReport = function() {
     const start = document.getElementById('filter-start').value;
     const end = document.getElementById('filter-end').value;
     const lecturerId = document.getElementById('filter-lecturer').value;
+    const statusFilter = document.getElementById('filter-status').value;
+    const printMode = document.getElementById('report-print-mode').value;
     
     if(!start || !end) { alert('Vui lòng chọn Từ ngày và Đến ngày'); return; }
 
     const validData = allSchedules.filter(s => {
-        let isValid = (s.status === 'Đã duyệt' && s.date >= start && s.date <= end);
+        let isValid = (s.date >= start && s.date <= end);
+
+        if (statusFilter === 'approved') {
+            isValid = isValid && (s.status === 'Đã duyệt');
+        } else if (statusFilter === 'pending') {
+            isValid = isValid && (s.status === 'Chờ duyệt');
+        }
+
         if (lecturerId !== 'all') {
             isValid = isValid && (s.userId === lecturerId);
         }
@@ -741,21 +750,30 @@ window.generateReport = function() {
 
     const reportMap = {};
     validData.forEach(item => {
+        const displayName = userProfiles[item.userId]?.displayName || item.shortName || item.userName;
         if(!reportMap[item.userId]) {
-            const displayName = userProfiles[item.userId]?.displayName || item.shortName || item.userName;
-            reportMap[item.userId] = { name: displayName, count: 0 };
+            reportMap[item.userId] = { name: displayName, count: 0, sessions: [] };
         }
-        reportMap[item.userId].count += 1; 
+        reportMap[item.userId].count += 1;
+        reportMap[item.userId].sessions.push(item);
     });
 
     const reportArray = Object.values(reportMap);
     
     const tbody = document.getElementById('report-table-body');
+    const detailBody = document.getElementById('report-detail-body');
+    const detailContainer = document.getElementById('report-detail-container');
     const printTbody = document.getElementById('print-table-body');
-    tbody.innerHTML = ''; printTbody.innerHTML = '';
+    tbody.innerHTML = ''; detailBody.innerHTML = ''; printTbody.innerHTML = '';
+
+    const printTitle = (printMode === 'detail-person' || printMode === 'detail-all')
+        ? 'Chi tiết lịch trực Khoa - Khoa HTT'
+        : 'Tổng hợp lịch trực Khoa - Khoa HTT';
+    document.getElementById('print-title-text').innerText = printTitle;
 
     if(reportArray.length === 0) {
         tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-500">Không có dữ liệu trong khoảng thời gian/tiêu chí này.</td></tr>`;
+        detailContainer.classList.add('hidden');
     } else {
         reportArray.forEach((row, idx) => {
             const hours = row.count * 4; 
@@ -769,23 +787,50 @@ window.generateReport = function() {
                 </tr>
             `;
 
-            printTbody.innerHTML += `
-                <tr>
-                    <td>${idx + 1}</td>
-                    <td style="text-align: left;">${row.name}</td>
-                    <td>${row.count}</td>
-                    <td>${hours}</td>
-                    <td></td>
-                </tr>
-            `;
+            if (printMode === 'detail-person' || printMode === 'detail-all') {
+                printTbody.innerHTML += `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td style="text-align: left;">${row.name}</td>
+                        <td>${row.count}</td>
+                        <td>${hours}</td>
+                        <td>${row.sessions.map(s => `${s.date.split('-').reverse().join('/')} (${s.shift})`).join(' | ')}</td>
+                    </tr>
+                `;
+            } else {
+                printTbody.innerHTML += `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td style="text-align: left;">${row.name}</td>
+                        <td>${row.count}</td>
+                        <td>${hours}</td>
+                        <td></td>
+                    </tr>
+                `;
+            }
+
+            row.sessions.sort((a, b) => new Date(a.date) - new Date(b.date));
+            row.sessions.forEach((item, sessionIdx) => {
+                const dateStr = item.date.split('-').reverse().join('/');
+                detailBody.innerHTML += `
+                    <tr class="border-b">
+                        <td class="p-2 text-center">${idx + 1}.${sessionIdx + 1}</td>
+                        <td class="p-2 font-semibold text-gray-800">${row.name}</td>
+                        <td class="p-2 text-gray-700">${dateStr}</td>
+                        <td class="p-2 text-center text-blue-600 font-semibold">${item.shift}</td>
+                        <td class="p-2 text-sm text-gray-600">${item.note || '-'}</td>
+                    </tr>
+                `;
+            });
         });
+
+        detailContainer.classList.remove('hidden');
     }
 
     document.getElementById('report-container').classList.remove('hidden');
     
-    // Thiết lập tiêu đề và chữ ký cho Bản in Tổng hợp của Admin
-    document.getElementById('print-col-2-title').innerText = "họ tên";
-    document.getElementById('print-title-text').innerText = "Tổng hợp lịch trực Khoa - Khoa HTT";
+    // Thiết lập tiêu đề và chữ ký cho Bản in của Admin
+    document.getElementById('print-col-2-title').innerText = (printMode === 'detail-person' || printMode === 'detail-all') ? 'chi tiết' : 'họ tên';
     
     const sStr = start.split('-').reverse().join('/');
     const eStr = end.split('-').reverse().join('/');
@@ -810,6 +855,7 @@ window.generateReport = function() {
 }
 
 window.printReport = function() {
+    window.generateReport();
     window.print();
 }
 
@@ -819,8 +865,14 @@ window.exportReportToExcel = function() {
     const end = document.getElementById('filter-end').value;
     const lecturerId = document.getElementById('filter-lecturer').value;
     
+    const statusFilter = document.getElementById('filter-status').value;
     const validData = allSchedules.filter(s => {
-        let isValid = (s.status === 'Đã duyệt' && s.date >= start && s.date <= end);
+        let isValid = (s.date >= start && s.date <= end);
+        if (statusFilter === 'approved') {
+            isValid = isValid && (s.status === 'Đã duyệt');
+        } else if (statusFilter === 'pending') {
+            isValid = isValid && (s.status === 'Chờ duyệt');
+        }
         if (lecturerId !== 'all') isValid = isValid && (s.userId === lecturerId);
         return isValid;
     });

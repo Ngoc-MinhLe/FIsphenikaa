@@ -368,6 +368,14 @@
 
                         <div class="flex flex-col sm:flex-row gap-4 mb-4">
                             <div class="flex-1">
+                                <label class="block text-xs text-gray-500 mb-1">Trạng thái</label>
+                                <select id="filter-status" class="w-full px-3 py-2 border rounded outline-none bg-gray-50 focus:bg-white transition">
+                                    <option value="all">Tất cả trạng thái</option>
+                                    <option value="approved">Chỉ đã duyệt</option>
+                                    <option value="pending">Chỉ chờ duyệt</option>
+                                </select>
+                            </div>
+                            <div class="flex-1">
                                 <label class="block text-xs text-gray-500 mb-1">Từ ngày</label>
                                 <input type="date" id="filter-start" class="w-full px-3 py-2 border rounded outline-none">
                             </div>
@@ -376,10 +384,20 @@
                                 <input type="date" id="filter-end" class="w-full px-3 py-2 border rounded outline-none">
                             </div>
                         </div>
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <div class="flex-1">
+                                <label class="block text-xs text-gray-500 mb-1">Chế độ in</label>
+                                <select id="report-print-mode" class="w-full px-3 py-2 border rounded outline-none bg-gray-50 focus:bg-white transition">
+                                    <option value="summary">Tổng hợp</option>
+                                    <option value="detail-person">Chi tiết từng người</option>
+                                    <option value="detail-all">Chi tiết toàn bộ</option>
+                                </select>
+                            </div>
+                        </div>
                         <button onclick="window.generateReport()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded shadow transition mb-3">
                             Xem Thống Kê
                         </button>
-                        <p class="text-xs text-gray-500 italic">* Chỉ tính các ca trực có trạng thái "Đã duyệt". 1 ca = 4 giờ quy đổi.</p>
+                        <p class="text-xs text-gray-500 italic">* Mặc định hiển thị tất cả người có lịch trong khoảng thời gian. 1 ca = 4 giờ quy đổi.</p>
                     </div>
                 </div>
 
@@ -427,6 +445,24 @@
                         </thead>
                         <tbody id="report-table-body"></tbody>
                     </table>
+
+                    <div id="report-detail-container" class="mt-6 border-t pt-4 hidden">
+                        <h4 class="font-semibold text-gray-800 mb-3">Chi tiết các buổi trực</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse border border-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="border p-2 w-12 text-center">STT</th>
+                                        <th class="border p-2">Giảng viên</th>
+                                        <th class="border p-2">Ngày</th>
+                                        <th class="border p-2">Ca</th>
+                                        <th class="border p-2">Ghi chú</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-detail-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
             </div>
