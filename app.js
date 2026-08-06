@@ -1,16 +1,7 @@
+import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, deleteDoc, updateDoc, setDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-const firebaseConfig = {
-    apiKey: "AIzaSyCET0_R6120tj389v5C62NhSLrBIk2CbIw",
-    authDomain: "qlylaodong-dev.firebaseapp.com",
-    projectId: "qlylaodong-dev",
-    storageBucket: "qlylaodong-dev.firebasestorage.app",
-    messagingSenderId: "789374516793",
-    appId: "1:789374516793:web:29fb38ad0913f8b62e17e8",
-    measurementId: "G-M2PJEBLMJF"
-};
+import { getFirestore, collection, addDoc, deleteDoc, updateDoc, setDoc, doc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -136,6 +127,28 @@ window.showView = function(viewId) {
         renderWeeklyGrid();
     }
 };
+
+// ==========================================
+// HÀM LOGGING CHUNG (DÙNG CHO CẢ NỢ MÔN)
+// ==========================================
+window.logToFirebase = async function(collectionName, data) {
+    if (!currentUser) {
+        console.error("Firebase log failed: User not logged in.");
+        return;
+    }
+    try {
+        await addDoc(collection(db, collectionName), {
+            ...data,
+            sentBy_uid: currentUser.uid,
+            sentBy_name: userProfiles[currentUser.uid]?.displayName || currentUser.shortName,
+            sentAt: serverTimestamp() // Tự động lấy giờ của server
+        });
+    } catch (e) {
+        console.error(`Error writing to collection ${collectionName}:`, e);
+        // Có thể thêm thông báo lỗi cho người dùng ở đây nếu cần
+    }
+}
+
 
 // ==========================================
 // DATA FETCHING (Schedules & User Profiles)
