@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thống kê & Phân tích Nợ môn Sinh viên</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS Excel Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-800 bg-slate-50">
+
+    <!-- Top Header -->
+    <header class="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/10 p-2.5 rounded-xl backdrop-blur-md">
+                    <i data-lucide="graduation-cap" class="w-8 h-8 text-blue-200"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">Hệ Thống Phân Tích Nợ Môn Học Phần</h1>
+                    <p class="text-xs text-blue-200">Tự động đọc & chuẩn hóa Bảng điểm Toàn khóa Excel (.xlsx)</p>
+                </div>
+            </div>
+            
+            <!-- Quick Action Buttons -->
+            <div id="headerActions" class="hidden flex items-center gap-2">
+                <button onclick="triggerFileInput()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-medium rounded-lg transition-all">
+                    <i data-lucide="file-up" class="w-4 h-4"></i> Tải File Khác
+                </button>
+                <button onclick="exportToExcel()" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg shadow transition-all">
+                    <i data-lucide="download" class="w-4 h-4"></i> Xuất Báo Cáo
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-6">
+
+        <!-- Hidden File Input -->
+        <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleFileSelect(event)">
+
+        <!-- File Upload Screen (Initial State) -->
+        <section id="uploadSection" class="my-auto py-12 flex flex-col items-center justify-center">
+            <div class="max-w-xl w-full bg-white rounded-2xl shadow-xl border border-slate-200/80 p-8 text-center space-y-6 transition-all hover:border-blue-300">
+                <div class="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                    <i data-lucide="file-spreadsheet" class="w-10 h-10"></i>
+                </div>
+                
+                <div class="space-y-2">
+                    <h2 class="text-2xl font-bold text-slate-800">Tải Lên Bảng Điểm Toàn Khóa</h2>
+                    <p class="text-sm text-slate-500">Hỗ trợ định dạng file Excel `.xlsx` mẫu K17-KTPM (tự động xử lý tất cả các sheet trong file)</p>
+                </div>
+
+                <!-- Dropzone Area -->
+                <div id="dropZone" onclick="triggerFileInput()" 
+                     class="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-blue-50/50 rounded-xl p-8 cursor-pointer transition-all flex flex-col items-center justify-center gap-3">
+                    <i data-lucide="upload-cloud" class="w-10 h-10 text-slate-400"></i>
+                    <div class="text-sm font-medium text-slate-700">
+                        Nhấp vào đây để chọn file hoặc Kéo & Thả file Excel vào đây
+                    </div>
+                    <p class="text-xs text-slate-400">Chỉ chấp nhận file .xlsx hoặc .xls</p>
+                </div>
+
+                <!-- Feature Badges -->
+                <div class="grid grid-cols-3 gap-3 pt-2 text-xs text-slate-600">
+                    <div class="bg-slate-100 p-2.5 rounded-lg flex items-center justify-center gap-1.5">
+                        <i data-lucide="users" class="w-4 h-4 text-blue-600"></i> Theo Sinh Viên
+                    </div>
+                    <div class="bg-slate-100 p-2.5 rounded-lg flex items-center justify-center gap-1.5">
+                        <i data-lucide="book-open" class="w-4 h-4 text-indigo-600"></i> Theo Môn Học
+                    </div>
+                    <div class="bg-slate-100 p-2.5 rounded-lg flex items-center justify-center gap-1.5">
+                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i> Thống Kê Tổng Quan
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Analytics Dashboard (Shown after file load) -->
+        <div id="dashboardSection" class="hidden flex-col gap-6">
+
+            <!-- Summary KPI Cards Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">Tổng Số Sinh Viên</p>
+                        <p id="kpiTotalStudents" class="text-2xl font-extrabold text-slate-800 mt-1">0</p>
+                        <span id="kpiClassesCount" class="text-xs text-slate-400">0 lớp/sheet</span>
+                    </div>
+                    <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                        <i data-lucide="users" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">Sinh Viên Còn Nợ Môn</p>
+                        <p id="kpiDebtorStudents" class="text-2xl font-extrabold text-amber-600 mt-1">0</p>
+                        <span id="kpiDebtorRate" class="text-xs text-amber-600 font-semibold">0% tổng số</span>
+                    </div>
+                    <div class="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                        <i data-lucide="user-x" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">Tổng Môn Học Toàn Khóa</p>
+                        <p id="kpiTotalSubjects" class="text-2xl font-extrabold text-indigo-600 mt-1">0</p>
+                        <span id="kpiDebtedSubjectsCount" class="text-xs text-indigo-500">0 môn có SV nợ</span>
+                    </div>
+                    <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                        <i data-lucide="book-marked" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">Lượt Môn Học Lại (Học Lại)</p>
+                        <p id="kpiTotalFailCount" class="text-2xl font-extrabold text-rose-600 mt-1">0</p>
+                        <span id="kpiAvgDebtsPerStudent" class="text-xs text-rose-500">TB 0 môn/SV nợ</span>
+                    </div>
+                    <div class="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Navigation Bar -->
+            <div class="bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap gap-1">
+                <button onclick="switchTab('overview')" id="tabBtn-overview" 
+                        class="tab-btn active flex-1 min-w-[130px] py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all bg-blue-600 text-white shadow-sm">
+                    <i data-lucide="pie-chart" class="w-4 h-4"></i> Tổng Quan & Biểu Đồ
+                </button>
+                <button onclick="switchTab('students')" id="tabBtn-students" 
+                        class="tab-btn flex-1 min-w-[130px] py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 flex items-center justify-center gap-2 transition-all">
+                    <i data-lucide="user-check" class="w-4 h-4"></i> Thống Kê Theo Sinh Viên
+                </button>
+                <button onclick="switchTab('subjects')" id="tabBtn-subjects" 
+                        class="tab-btn flex-1 min-w-[130px] py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 flex items-center justify-center gap-2 transition-all">
+                    <i data-lucide="book-open" class="w-4 h-4"></i> Thống Kê Theo Môn Học
+                </button>
+            </div>
+
+            <!-- TAB 1: OVERVIEW & CHARTS -->
+            <div id="tabContent-overview" class="tab-content space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Top Failed Subjects Chart -->
+                    <div class="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-base">Top 10 Môn Học Có Sinh Viên Nợ Nhiều Nhất</h3>
+                                <p class="text-xs text-slate-500">Danh sách môn có tỷ lệ trượt / học lại cao nhất</p>
+                            </div>
+                            <i data-lucide="bar-chart-3" class="w-5 h-5 text-slate-400"></i>
+                        </div>
+                        <div class="relative flex-1 min-h-[300px]">
+                            <canvas id="topSubjectsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Class Breakdown Card -->
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
+                        <h3 class="font-bold text-slate-800 text-base mb-1">Phân Bộ Theo Lớp / Sheet</h3>
+                        <p class="text-xs text-slate-500 mb-4">Tỷ lệ nợ môn giữa các lớp trong file Excel</p>
+                        
+                        <div id="classListContainer" class="space-y-3 custom-scrollbar overflow-y-auto max-h-[300px] pr-1">
+                            <!-- Class items dynamically populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: BY STUDENT VIEW -->
+            <div id="tabContent-students" class="tab-content hidden space-y-4">
+                <!-- Search & Filters -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
+                    <div class="relative w-full md:w-96">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="studentSearchInput" oninput="renderStudentsList()" 
+                               placeholder="Tìm theo tên SV, MSSV..." 
+                               class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                        <select id="studentClassFilter" onchange="renderStudentsList()" 
+                                class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="ALL">Tất cả Lớp/Sheet</option>
+                        </select>
+
+                        <select id="studentDebtFilter" onchange="renderStudentsList()" 
+                                class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="DEBT_ONLY">Chỉ hiện SV còn nợ môn</option>
+                            <option value="ALL">Hiện tất cả sinh viên</option>
+                            <option value="CLEAN_ONLY">Chỉ hiện SV không nợ môn nào</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Students Count Subheader -->
+                <div class="flex items-center justify-between text-xs text-slate-500 px-1">
+                    <span id="studentsListCount">Hiển thị 0 sinh viên</span>
+                    <span>Bấm vào dòng để xem chi tiết môn nợ</span>
+                </div>
+
+                <!-- Students Debt Table -->
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100/80 text-slate-600 font-semibold border-b border-slate-200">
+                                    <th class="py-3 px-4 w-12 text-center">STT</th>
+                                    <th class="py-3 px-4">Lớp / Sheet</th>
+                                    <th class="py-3 px-4">Mã Sinh Viên</th>
+                                    <th class="py-3 px-4">Họ và Tên</th>
+                                    <th class="py-3 px-4">Ngày Sinh</th>
+                                    <th class="py-3 px-4 text-center">Số Môn Nợ</th>
+                                    <th class="py-3 px-4">Danh Sách Môn Nợ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentsTableBody" class="divide-y divide-slate-100">
+                                <!-- Student rows rendered here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: BY SUBJECT VIEW -->
+            <div id="tabContent-subjects" class="tab-content hidden space-y-4">
+                <!-- Search & Filters -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
+                    <div class="relative w-full md:w-96">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="subjectSearchInput" oninput="renderSubjectsList()" 
+                               placeholder="Tìm tên môn học, mã môn..." 
+                               class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+                        <select id="subjectSortFilter" onchange="renderSubjectsList()" 
+                                class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="MOST_DEBT">Sắp xếp: Số SV nợ nhiều nhất</option>
+                            <option value="NAME_ASC">Sắp xếp: Tên môn A - Z</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Subjects Accordion / Cards List -->
+                <div id="subjectsListContainer" class="space-y-3">
+                    <!-- Subject cards populated here -->
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        // Global Application State
+        let parsedData = {
+            sheets: [],         // Sheet names
+            students: [],       // Array of all student objects
+            subjectsMap: {},    // Map of subjectCode/Name -> details + array of failed students
+            classStats: {}      // Sheet stats
+        };
+
+        let topChartInstance = null;
+
+        // On DOM Loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            setupDragAndDrop();
+        });
+
+        function triggerFileInput() {
+            document.getElementById('excelFileInput').click();
+        }
+
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('dropZone');
+            if (!dropZone) return;
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.add('bg-blue-100/50', 'border-blue-500'), false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.remove('bg-blue-100/50', 'border-blue-500'), false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files && files.length > 0) {
+                    processFile(files[0]);
+                }
+            });
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                processFile(file);
+            }
+        }
+
+        function processFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    parseWorkbook(workbook);
+
+                    // Switch UI view
+                    document.getElementById('uploadSection').classList.add('hidden');
+                    document.getElementById('dashboardSection').classList.remove('hidden');
+                    document.getElementById('dashboardSection').classList.add('flex');
+                    document.getElementById('headerActions').classList.remove('hidden');
+
+                    // Render views
+                    updateKPIs();
+                    renderClassList();
+                    renderStudentsList();
+                    renderSubjectsList();
+                    renderChart();
+                    populateClassFilterOptions();
+
+                    showNotice('Đã phân tích chuẩn hóa thành công bảng điểm!', 'success');
+
+                } catch (err) {
+                    console.error(err);
+                    showNotice('Lỗi đọc file Excel: ' + err.message, 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseWorkbook(workbook) {
+            parsedData = {
+                sheets: workbook.SheetNames,
+                students: [],
+                subjectsMap: {},
+                classStats: {}
+            };
+
+            function normalizeText(str) {
+                if (str === null || str === undefined) return '';
+                return String(str)
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .replace(/đ/g, "d").replace(/Đ/g, "D")
+                    .toUpperCase()
+                    .trim();
+            }
+
+            workbook.SheetNames.forEach(sheetName => {
+                const worksheet = workbook.Sheets[sheetName];
+                const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+
+                if (!matrix || matrix.length < 5) return;
+
+                // 1. Dynamic Search for Main Student Info Header Row
+                let mainHeaderIdx = -1;
+                for (let r = 0; r < Math.min(30, matrix.length); r++) {
+                    const row = matrix[r];
+                    if (!row) continue;
+                    const rowStr = row.map(c => normalizeText(c)).join(' ');
+                    if ((rowStr.includes('MSSV') || rowStr.includes('MA SO') || rowStr.includes('MA SV')) && 
+                        (rowStr.includes('HO TEN') || rowStr.includes('TEN') || rowStr.includes('HO'))) {
+                        mainHeaderIdx = r;
+                        break;
+                    }
+                }
+
+                if (mainHeaderIdx === -1) mainHeaderIdx = 8; // Fallback index
+
+                // Dynamic Column Position Resolution
+                let colStt = 0, colId = -1, colName = -1, colName2 = -1, colDob = -1;
+
+                for (let rDelta = -1; rDelta <= 1; rDelta++) {
+                    const r = mainHeaderIdx + rDelta;
+                    if (r < 0 || r >= matrix.length) continue;
+                    const row = matrix[r] || [];
+                    row.forEach((cell, colIdx) => {
+                        const norm = normalizeText(cell);
+                        if (norm === 'STT' || norm === 'TT') colStt = colIdx;
+                        if ((norm.includes('MSSV') || norm.includes('MA SV') || norm.includes('MA SO') || norm.includes('MASO')) && colId === -1) colId = colIdx;
+                        if ((norm.includes('HO TEN') || norm.includes('HOTEN') || norm.includes('HO VA TEN')) && colName === -1) colName = colIdx;
+                        if ((norm === 'HO' || norm === 'HO LOT' || norm === 'HO DEM') && colName === -1) colName = colIdx;
+                        if (norm === 'TEN' && colName !== -1 && colName2 === -1 && colIdx !== colName) colName2 = colIdx;
+                        if ((norm.includes('NGAY SINH') || norm.includes('NS') || norm.includes('DOB')) && colDob === -1) colDob = colIdx;
+                    });
+                }
+
+                // Fallback Defaults if missing
+                if (colId === -1) colId = 1;
+                if (colName === -1) colName = colId + 1;
+
+                // 2. Identify Subject Header Row & Sub-header Row
+                let subjectNameRowIdx = mainHeaderIdx;
+                if (mainHeaderIdx > 0) {
+                    let hasSubjectAbove = false;
+                    (matrix[mainHeaderIdx - 1] || []).forEach((cell, idx) => {
+                        if (idx > Math.max(colId, colName, colDob, 4) && cell && String(cell).trim().length > 3) {
+                            hasSubjectAbove = true;
+                        }
+                    });
+                    if (hasSubjectAbove) subjectNameRowIdx = mainHeaderIdx - 1;
+                }
+
+                let subHeaderIdx = mainHeaderIdx + 1;
+                if (subHeaderIdx >= matrix.length) subHeaderIdx = mainHeaderIdx;
+
+                const nameRow = matrix[subjectNameRowIdx] || [];
+                const subRow = matrix[subHeaderIdx] || [];
+
+                // Scan Subjects starting after student metadata
+                const startSearchCol = Math.max(colStt, colId, colName, colName2, colDob, 4) + 1;
+                
+                let subjectsInSheet = [];
+                let currentSubj = null;
+                let startCol = null;
+
+                const summaryKeywords = [
+                    'TONG SO', 'SO HOC PHAN', 'DIEM TRUNG BINH', 'XEP LOAI', 'TICH LUY', 
+                    'GPA', 'CBL', 'SO TC', 'TBCH', 'DTBC', 'TONG TC', 'SO TC NO', 'NO MON', 'SOTIENCAN'
+                ];
+
+                for (let c = startSearchCol; c < nameRow.length; c++) {
+                    const cellVal = nameRow[c] || matrix[mainHeaderIdx]?.[c];
+                    const strVal = cellVal ? String(cellVal).trim() : '';
+                    const normVal = normalizeText(strVal);
+
+                    if (summaryKeywords.some(kw => normVal.includes(kw))) {
+                        if (currentSubj !== null) {
+                            subjectsInSheet.push({ name: currentSubj, startCol: startCol, endCol: c - 1 });
+                            currentSubj = null;
+                        }
+                        break;
+                    }
+
+                    if (strVal !== '') {
+                        if (currentSubj !== null) {
+                            subjectsInSheet.push({ name: currentSubj, startCol: startCol, endCol: c - 1 });
+                        }
+                        currentSubj = strVal;
+                        startCol = c;
+                    }
+                }
+
+                if (currentSubj !== null && startCol !== null) {
+                    subjectsInSheet.push({
+                        name: currentSubj,
+                        startCol: startCol,
+                        endCol: nameRow.length - 1
+                    });
+                }
+
+                // Global subject registration
+                subjectsInSheet.forEach(s => {
+                    if (!parsedData.subjectsMap[s.name]) {
+                        parsedData.subjectsMap[s.name] = {
+                            name: s.name,
+                            failedStudents: []
+                        };
+                    }
+                });
+
+                parsedData.classStats[sheetName] = {
+                    totalStudents: 0,
+                    debtorStudents: 0,
+                    totalDebts: 0
+                };
+
+                // 3. Parse Student Rows
+                const dataStartRow = subHeaderIdx + 1;
+
+                for (let r = dataStartRow; r < matrix.length; r++) {
+                    const row = matrix[r];
+                    if (!row) continue;
+
+                    const stt = row[colStt];
+                    const studentId = row[colId] ? String(row[colId]).trim() : '';
+                    
+                    let studentName = row[colName] ? String(row[colName]).trim() : '';
+                    if (colName2 !== -1 && row[colName2]) {
+                        studentName += ' ' + String(row[colName2]).trim();
+                    }
+                    
+                    const dob = (colDob !== -1 && row[colDob]) ? String(row[colDob]).trim() : '';
+
+                    // Valid student check
+                    if (studentId.length >= 3 && (stt !== null && stt !== '' && !isNaN(Number(stt)))) {
+                        parsedData.classStats[sheetName].totalStudents++;
+                        let studentDebts = [];
+
+                        subjectsInSheet.forEach(subj => {
+                            let tkhp = null;
+                            let diemChu = null;
+                            let danhGia = null;
+
+                            for (let col = subj.startCol; col <= subj.endCol; col++) {
+                                const subNameNorm = normalizeText(subRow[col] || matrix[mainHeaderIdx]?.[col]);
+                                const val = row[col];
+
+                                if (subNameNorm.includes('TKHP') || subNameNorm.includes('DIEM TK') || subNameNorm === 'TK' || subNameNorm.includes('TDT')) {
+                                    tkhp = val;
+                                } else if (subNameNorm.includes('CHU') || subNameNorm === 'C') {
+                                    diemChu = val;
+                                } else if (subNameNorm.includes('DANH GIA') || subNameNorm.includes('GHI CHU') || subNameNorm === 'DG' || subNameNorm.includes('KQ')) {
+                                    danhGia = val;
+                                } else if (tkhp === null && val !== null && !isNaN(Number(val))) {
+                                    tkhp = val;
+                                }
+                            }
+
+                            // Evaluate Debt Status
+                            let isDebt = false;
+                            let reason = '';
+
+                            const normDanhGia = normalizeText(danhGia);
+                            const normDiemChu = normalizeText(diemChu);
+
+                            // Helper to detect non-graded/exempt/unstudied cells
+                            const isExemptOrUnstudied = (val) => {
+                                if (val === null || val === undefined || val === '') return true;
+                                const n = normalizeText(val);
+                                return n === '-' || n === 'MIEN' || n === 'HOAN' || n === 'CHUA HOC' || n === 'KHT' || n === 'P';
+                            };
+
+                            // Explicit debt markers
+                            if (normDanhGia.includes('HOC LAI') || normDanhGia.includes('THI LAI') || normDanhGia.includes('KHONG DAT') || normDanhGia.includes('HOCLAI') || normDanhGia.includes('THILAI') || normDanhGia === 'NO' || normDanhGia === 'FAIL') {
+                                isDebt = true;
+                                reason = String(danhGia);
+                            } 
+                            else if (normDiemChu === 'F' || normDiemChu.startsWith('F(') || normDiemChu === 'F*') {
+                                isDebt = true;
+                                reason = 'Điểm F';
+                            } 
+                            else if (tkhp !== null && tkhp !== '' && !isNaN(Number(tkhp)) && !isExemptOrUnstudied(tkhp)) {
+                                const numTkhp = Number(tkhp);
+                                if (numTkhp >= 0 && numTkhp < 4.0 && normDiemChu !== 'M' && normDiemChu !== 'P') {
+                                    isDebt = true;
+                                    reason = `TKHP: ${numTkhp}`;
+                                }
+                            }
+
+                            if (isDebt) {
+                                const debtObj = {
+                                    subjectName: subj.name,
+                                    tkhp: (tkhp !== null && tkhp !== '') ? tkhp : '-',
+                                    diemChu: diemChu || 'F',
+                                    danhGia: danhGia || 'HỌC LẠI',
+                                    reason: reason
+                                };
+                                studentDebts.push(debtObj);
+
+                                parsedData.subjectsMap[subj.name].failedStudents.push({
+                                    studentId: studentId,
+                                    studentName: studentName,
+                                    sheetName: sheetName,
+                                    dob: dob,
+                                    tkhp: debtObj.tkhp,
+                                    diemChu: debtObj.diemChu,
+                                    danhGia: debtObj.danhGia
+                                });
+                            }
+                        });
+
+                        if (studentDebts.length > 0) {
+                            parsedData.classStats[sheetName].debtorStudents++;
+                            parsedData.classStats[sheetName].totalDebts += studentDebts.length;
+                        }
+
+                        parsedData.students.push({
+                            stt: stt,
+                            id: studentId,
+                            name: studentName,
+                            dob: dob,
+                            sheetName: sheetName,
+                            debts: studentDebts
+                        });
+                    }
+                }
+            });
+        }
+
+        function updateKPIs() {
+            const totalStudents = parsedData.students.length;
+            const debtorStudents = parsedData.students.filter(s => s.debts.length > 0).length;
+            const debtorRate = totalStudents > 0 ? ((debtorStudents / totalStudents) * 100).toFixed(1) : 0;
+            const totalSubjects = Object.keys(parsedData.subjectsMap).length;
+            
+            const debtedSubjects = Object.values(parsedData.subjectsMap).filter(s => s.failedStudents.length > 0).length;
+            
+            let totalFailuresCount = 0;
+            parsedData.students.forEach(s => totalFailuresCount += s.debts.length);
+
+            const avgDebts = debtorStudents > 0 ? (totalFailuresCount / debtorStudents).toFixed(1) : 0;
+
+            document.getElementById('kpiTotalStudents').innerText = totalStudents;
+            document.getElementById('kpiClassesCount').innerText = `${parsedData.sheets.length} Lớp / Sheet`;
+
+            document.getElementById('kpiDebtorStudents').innerText = debtorStudents;
+            document.getElementById('kpiDebtorRate').innerText = `${debtorRate}% tổng số SV`;
+
+            document.getElementById('kpiTotalSubjects').innerText = totalSubjects;
+            document.getElementById('kpiDebtedSubjectsCount').innerText = `${debtedSubjects} môn có SV nợ`;
+
+            document.getElementById('kpiTotalFailCount').innerText = totalFailuresCount;
+            document.getElementById('kpiAvgDebtsPerStudent').innerText = `TB ${avgDebts} môn / SV nợ`;
+        }
+
+        function renderClassList() {
+            const container = document.getElementById('classListContainer');
+            container.innerHTML = '';
+
+            Object.entries(parsedData.classStats).forEach(([className, stats]) => {
+                const rate = stats.totalStudents > 0 ? ((stats.debtorStudents / stats.totalStudents) * 100).toFixed(1) : 0;
+                
+                const card = document.createElement('div');
+                card.className = 'p-3 rounded-xl border border-slate-100 bg-slate-50 flex items-center justify-between';
+                card.innerHTML = `
+                    <div>
+                        <p class="font-semibold text-slate-800 text-xs">${className}</p>
+                        <p class="text-[11px] text-slate-500">${stats.totalStudents} SV • <span class="text-amber-600 font-medium">${stats.debtorStudents} SV nợ môn</span></p>
+                    </div>
+                    <div class="text-right">
+                        <span class="inline-block px-2 py-0.5 text-[11px] font-bold rounded-full ${rate > 50 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}">
+                            ${rate}% nợ
+                        </span>
+                        <p class="text-[10px] text-slate-400 mt-0.5">${stats.totalDebts} lượt nợ</p>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('topSubjectsChart').getContext('2d');
+            
+            const sortedSubjects = Object.values(parsedData.subjectsMap)
+                .filter(s => s.failedStudents.length > 0)
+                .sort((a, b) => b.failedStudents.length - a.failedStudents.length)
+                .slice(0, 10);
+
+            const labels = sortedSubjects.map(s => {
+                const name = s.name.split(' - ')[0];
+                return name.length > 20 ? name.substring(0, 20) + '...' : name;
+            });
+            const dataValues = sortedSubjects.map(s => s.failedStudents.length);
+
+            if (topChartInstance) {
+                topChartInstance.destroy();
+            }
+
+            topChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Số lượng Sinh viên Nợ / Học lại',
+                        data: dataValues,
+                        backgroundColor: 'rgba(239, 68, 68, 0.85)',
+                        borderColor: 'rgb(220, 38, 38)',
+                        borderWidth: 1,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return sortedSubjects[context[0].dataIndex].name;
+                                },
+                                label: function(context) {
+                                    return `Số SV nợ: ${context.parsed.y} sinh viên`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        },
+                        x: {
+                            ticks: { font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function populateClassFilterOptions() {
+            const select = document.getElementById('studentClassFilter');
+            select.innerHTML = '<option value="ALL">Tất cả Lớp/Sheet</option>';
+            parsedData.sheets.forEach(sh => {
+                const opt = document.createElement('option');
+                opt.value = sh;
+                opt.textContent = sh;
+                select.appendChild(opt);
+            });
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm');
+                btn.classList.add('text-slate-600', 'hover:bg-slate-100');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+
+            const activeBtn = document.getElementById(`tabBtn-${tabId}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-100');
+                activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow-sm');
+            }
+
+            const activeContent = document.getElementById(`tabContent-${tabId}`);
+            if (activeContent) {
+                activeContent.classList.remove('hidden');
+            }
+        }
+
+        function renderStudentsList() {
+            const searchTerm = document.getElementById('studentSearchInput').value.toLowerCase().trim();
+            const classFilter = document.getElementById('studentClassFilter').value;
+            const debtFilter = document.getElementById('studentDebtFilter').value;
+
+            const filtered = parsedData.students.filter(st => {
+                const matchesSearch = st.name.toLowerCase().includes(searchTerm) || st.id.toLowerCase().includes(searchTerm);
+                const matchesClass = classFilter === 'ALL' || st.sheetName === classFilter;
+                
+                let matchesDebt = true;
+                if (debtFilter === 'DEBT_ONLY') matchesDebt = st.debts.length > 0;
+                else if (debtFilter === 'CLEAN_ONLY') matchesDebt = st.debts.length === 0;
+
+                return matchesSearch && matchesClass && matchesDebt;
+            });
+
+            document.getElementById('studentsListCount').innerText = `Hiển thị ${filtered.length} / ${parsedData.students.length} sinh viên`;
+
+            const tbody = document.getElementById('studentsTableBody');
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="py-8 text-center text-slate-400">Không tìm thấy sinh viên phù hợp</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            filtered.forEach((st, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition-colors border-b border-slate-100 cursor-pointer';
+                
+                const debtBadge = st.debts.length > 0 
+                    ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700">${st.debts.length} môn nợ</span>`
+                    : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Đạt 100%</span>`;
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-center font-medium text-slate-400">${idx + 1}</td>
+                    <td class="py-3 px-4 font-medium text-slate-600">${st.sheetName}</td>
+                    <td class="py-3 px-4 font-semibold text-blue-700">${st.id}</td>
+                    <td class="py-3 px-4 font-bold text-slate-800">${st.name}</td>
+                    <td class="py-3 px-4 text-slate-500">${st.dob || '-'}</td>
+                    <td class="py-3 px-4 text-center">${debtBadge}</td>
+                    <td class="py-3 px-4 text-slate-600 max-w-xs truncate">
+                        ${st.debts.map(d => d.subjectName.split(' - ')[0]).join(', ') || '<span class="text-slate-400 font-normal">Không nợ môn nào</span>'}
+                    </td>
+                `;
+
+                // Detailed collapsible row
+                const detailTr = document.createElement('tr');
+                detailTr.className = 'hidden bg-slate-50/80 border-b border-slate-200';
+                
+                let debtItemsHtml = st.debts.map(d => `
+                    <div class="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center justify-between text-xs shadow-xs">
+                        <div>
+                            <p class="font-bold text-slate-800">${d.subjectName}</p>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Trạng thái: <span class="font-semibold text-rose-600">${d.danhGia}</span></p>
+                        </div>
+                        <div class="text-right">
+                            <span class="px-2 py-0.5 font-bold bg-rose-100 text-rose-800 rounded">${d.diemChu} (TKHP: ${d.tkhp})</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                if (st.debts.length === 0) {
+                    debtItemsHtml = `<p class="text-xs text-emerald-600 font-medium">✨ Sinh viên đã hoàn thành đạt tất cả các môn học!</p>`;
+                }
+
+                detailTr.innerHTML = `
+                    <td colspan="7" class="p-4">
+                        <div class="space-y-2 max-w-4xl mx-auto">
+                            <p class="text-xs font-bold text-slate-700 uppercase tracking-wider">Chi Tiết Các Môn Nợ Của ${st.name} (${st.id}):</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                ${debtItemsHtml}
+                            </div>
+                        </div>
+                    </td>
+                `;
+
+                tr.addEventListener('click', () => {
+                    detailTr.classList.toggle('hidden');
+                });
+
+                tbody.appendChild(tr);
+                tbody.appendChild(detailTr);
+            });
+        }
+
+        function renderSubjectsList() {
+            const searchTerm = document.getElementById('subjectSearchInput').value.toLowerCase().trim();
+            const sortFilter = document.getElementById('subjectSortFilter').value;
+
+            let subjectsArray = Object.values(parsedData.subjectsMap).filter(subj => {
+                return subj.name.toLowerCase().includes(searchTerm);
+            });
+
+            if (sortFilter === 'MOST_DEBT') {
+                subjectsArray.sort((a, b) => b.failedStudents.length - a.failedStudents.length);
+            } else if (sortFilter === 'NAME_ASC') {
+                subjectsArray.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+            }
+
+            const container = document.getElementById('subjectsListContainer');
+            container.innerHTML = '';
+
+            if (subjectsArray.length === 0) {
+                container.innerHTML = `
+                    <div class="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-400">
+                        Không tìm thấy môn học phù hợp
+                    </div>
+                `;
+                return;
+            }
+
+            subjectsArray.forEach((subj, idx) => {
+                const failCount = subj.failedStudents.length;
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden transition-all';
+
+                const header = document.createElement('div');
+                header.className = 'p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 border-b border-transparent';
+                header.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${failCount > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
+                            ${failCount}
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-slate-800 text-sm">${subj.name}</h4>
+                            <p class="text-xs text-slate-400">${failCount > 0 ? `${failCount} sinh viên chưa đạt` : 'Không có sinh viên nợ môn này'}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded-lg ${failCount > 0 ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-500'}">
+                            ${failCount > 0 ? 'Cần Học Lại' : 'Hoàn Thành'}
+                        </span>
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform duration-200"></i>
+                    </div>
+                `;
+
+                const body = document.createElement('div');
+                body.className = 'hidden p-4 bg-slate-50 border-t border-slate-200';
+
+                if (failCount === 0) {
+                    body.innerHTML = `<p class="text-xs text-slate-500 italic">Không có sinh viên nào phải học lại môn học này.</p>`;
+                } else {
+                    let tableRows = subj.failedStudents.map((sv, sIdx) => `
+                        <tr class="border-b border-slate-200/60 hover:bg-white text-xs">
+                            <td class="py-2 px-3 text-center text-slate-400">${sIdx + 1}</td>
+                            <td class="py-2 px-3 font-semibold text-blue-700">${sv.studentId}</td>
+                            <td class="py-2 px-3 font-bold text-slate-800">${sv.studentName}</td>
+                            <td class="py-2 px-3 text-slate-600">${sv.sheetName}</td>
+                            <td class="py-2 px-3 text-center font-semibold text-rose-600">${sv.diemChu} (TKHP: ${sv.tkhp})</td>
+                            <td class="py-2 px-3 text-center"><span class="px-2 py-0.5 bg-rose-100 text-rose-700 rounded text-[11px] font-bold">${sv.danhGia}</span></td>
+                        </tr>
+                    `).join('');
+
+                    body.innerHTML = `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                <thead>
+                                    <tr class="bg-slate-100 text-slate-600 text-xs font-semibold">
+                                        <th class="py-2.5 px-3 text-center w-10">STT</th>
+                                        <th class="py-2.5 px-3">MSSV</th>
+                                        <th class="py-2.5 px-3">Họ Tên</th>
+                                        <th class="py-2.5 px-3">Lớp / Sheet</th>
+                                        <th class="py-2.5 px-3 text-center">Điểm số</th>
+                                        <th class="py-2.5 px-3 text-center">Đánh giá</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${tableRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }
+
+                header.addEventListener('click', () => {
+                    body.classList.toggle('hidden');
+                    const icon = header.querySelector('[data-lucide="chevron-down"]');
+                    if (icon) icon.classList.toggle('rotate-180');
+                });
+
+                card.appendChild(header);
+                card.appendChild(body);
+                container.appendChild(card);
+            });
+
+            lucide.createIcons();
+        }
+
+        function exportToExcel() {
+            if (!parsedData.students || parsedData.students.length === 0) {
+                showNotice('Chưa có dữ liệu để xuất!', 'error');
+                return;
+            }
+
+            const exportRows = [];
+            parsedData.students.forEach(st => {
+                if (st.debts.length > 0) {
+                    st.debts.forEach(d => {
+                        exportRows.push({
+                            'Lớp / Sheet': st.sheetName,
+                            'Mã Sinh Viên': st.id,
+                            'Họ và Tên': st.name,
+                            'Ngày Sinh': st.dob,
+                            'Tên Môn Nợ': d.subjectName,
+                            'Điểm Tổng Kết (TKHP)': d.tkhp,
+                            'Điểm Chữ': d.diemChu,
+                            'Đánh Giá': d.danhGia
+                        });
+                    });
+                }
+            });
+
+            if (exportRows.length === 0) {
+                showNotice('Không có sinh viên nợ môn nào để xuất!', 'info');
+                return;
+            }
+
+            const ws = XLSX.utils.json_to_sheet(exportRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Danh_Sach_No_Mon");
+
+            XLSX.writeFile(wb, `Bao_Cao_No_Mon_Sinh_Vien.xlsx`);
+        }
+
+        function showNotice(msg, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-5 right-5 px-4 py-3 rounded-xl shadow-lg text-white text-xs font-semibold z-50 flex items-center gap-2 transition-all duration-300 transform translate-y-full ${type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}`;
+            toast.innerHTML = `<i data-lucide="${type === 'error' ? 'alert-circle' : 'check-circle'}" class="w-4 h-4"></i> ${msg}`;
+            document.body.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => toast.classList.remove('translate-y-full'), 10);
+            setTimeout(() => {
+                toast.classList.add('translate-y-full');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
