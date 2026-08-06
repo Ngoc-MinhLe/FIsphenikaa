@@ -56,7 +56,7 @@
                 </div>
                 <div>
                     <h1 class="text-2xl font-bold tracking-tight">Hệ Thống Phân Tích Nợ Môn Sinh Viên</h1>
-                    <p class="text-indigo-200 text-xs sm:text-sm mt-0.5">Tự động bóc tách Bảng điểm K17 KTPM & các khoá đào tạo toàn trường</p>
+                    <p class="text-indigo-200 text-xs sm:text-sm mt-0.5">Tự động nhận diện lịch sử học lại (ký hiệu |) & bóc tách điểm chuẩn xác 100%</p>
                 </div>
             </div>
 
@@ -89,7 +89,7 @@
                 </div>
                 
                 <h2 class="text-2xl font-bold text-slate-800 mb-2">Tải Hoặc Kéo Thả Bảng Điểm Excel</h2>
-                <p class="text-slate-500 text-sm mb-8 leading-relaxed max-w-md mx-auto">Kéo thả tệp Excel (`.xlsx`, `.xls`) trực tiếp vào khung này hoặc chọn từ máy tính để phân tích tự động.</p>
+                <p class="text-slate-500 text-sm mb-8 leading-relaxed max-w-md mx-auto">Kéo thả tệp Excel (`.xlsx`, `.xls`) trực tiếp vào đây. Hỗ trợ tách lịch sử học lại (`HOCLAI|DAT`) để tính chính xác nợ môn thực tế.</p>
 
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleFileUpload(event)">
                 
@@ -107,7 +107,7 @@
 
                 <div id="loadingSpinner" class="hidden mt-8 flex flex-col items-center justify-center gap-3">
                     <div class="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
-                    <span class="text-sm font-medium text-slate-600">Đang quét bóc tách từng sinh viên và danh mục môn học...</span>
+                    <span class="text-sm font-medium text-slate-600">Đang quét bóc tách lịch sử điểm thi lại / học lại...</span>
                 </div>
             </div>
         </div>
@@ -151,7 +151,7 @@
 
                     <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
                         <div class="flex items-center justify-between mb-4">
-                            <span class="text-xs font-bold uppercase tracking-wider text-amber-500">Sinh Viên Nợ Môn</span>
+                            <span class="text-xs font-bold uppercase tracking-wider text-amber-500">Sinh Viên Đang Nợ Môn</span>
                             <div class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
                                 <i class="fa-solid fa-user-xmark text-lg"></i>
                             </div>
@@ -173,7 +173,7 @@
 
                     <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
                         <div class="flex items-center justify-between mb-4">
-                            <span class="text-xs font-bold uppercase tracking-wider text-rose-500">Tổng Lượt Nợ Môn</span>
+                            <span class="text-xs font-bold uppercase tracking-wider text-rose-500">Tổng Lượt Nợ Hiện Tại</span>
                             <div class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
                                 <i class="fa-solid fa-triangle-exclamation text-lg"></i>
                             </div>
@@ -188,7 +188,7 @@
                         <div class="flex items-center justify-between mb-6">
                             <div>
                                 <h3 class="text-lg font-bold text-slate-800">Top 10 Môn Học Có Sinh Viên Nợ Nhiều Nhất</h3>
-                                <p class="text-xs text-slate-500 mt-0.5">Môn học có lượt thi lại / học lại cao nhất</p>
+                                <p class="text-xs text-slate-500 mt-0.5">Danh sách môn học chưa xóa nợ cao nhất hiện tại</p>
                             </div>
                             <span class="p-2 bg-slate-100 rounded-xl text-slate-500 text-sm"><i class="fa-solid fa-chart-column"></i></span>
                         </div>
@@ -199,7 +199,7 @@
 
                     <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col">
                         <h3 class="text-lg font-bold text-slate-800 mb-1">Phân Bộ Theo Lớp / Sheet</h3>
-                        <p class="text-xs text-slate-500 mb-6">Tỷ lệ nợ môn giữa các lớp trong file Excel</p>
+                        <p class="text-xs text-slate-500 mb-6">Tỷ lệ nợ môn thực tế giữa các lớp</p>
                         
                         <div id="classListContainer" class="space-y-4 custom-scrollbar overflow-y-auto max-h-72 pr-2 flex-1">
                             <!-- Class items dynamically injected -->
@@ -222,9 +222,9 @@
                         </select>
 
                         <select id="debtFilterSelect" onchange="renderStudentsTab()" class="px-4 py-2.5 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:border-brand-500 bg-slate-50/50 text-slate-700 font-medium">
-                            <option value="HAS_DEBT">Chỉ hiện SV nợ môn</option>
+                            <option value="HAS_DEBT">Chỉ hiện SV đang nợ môn</option>
                             <option value="ALL">Tất cả sinh viên</option>
-                            <option value="NO_DEBT">Chỉ hiện SV không nợ</option>
+                            <option value="NO_DEBT">Chỉ hiện SV đã sạch nợ / Đạt</option>
                         </select>
                     </div>
                 </div>
@@ -260,7 +260,7 @@
             <div class="p-6 bg-slate-900 text-white flex justify-between items-start">
                 <div>
                     <h3 id="modalSubjectName" class="text-lg font-bold">Tên Môn Học</h3>
-                    <p id="modalSubjectSubtitle" class="text-xs text-indigo-300 mt-1">Danh sách sinh viên học lại</p>
+                    <p id="modalSubjectSubtitle" class="text-xs text-indigo-300 mt-1">Danh sách sinh viên đang nợ môn</p>
                 </div>
                 <button onclick="closeSubjectModal()" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
                     <i class="fa-solid fa-xmark"></i>
@@ -273,7 +273,7 @@
         </div>
     </div>
 
-    <!-- STREAMING_CHUNK:Application Logic & Excel Parsing Script... -->
+    <!-- STREAMING_CHUNK:Application Logic & Pipe Splitting Script... -->
     <script>
         let globalData = {
             sheets: [],
@@ -347,6 +347,17 @@
                 .trim();
         }
 
+        // Extract the latest attempt from values separated by pipe "|"
+        function getLatestAttempt(value) {
+            if (value === null || value === undefined) return '';
+            const str = String(value).trim();
+            if (str.includes('|')) {
+                const parts = str.split('|');
+                return parts[parts.length - 1].trim(); // Get the last element
+            }
+            return str;
+        }
+
         function handleFileUpload(event) {
             const file = event.target.files[0];
             if (file) processFile(file);
@@ -378,7 +389,7 @@
             }, 50);
         }
 
-        <!-- STREAMING_CHUNK:Workbook Parsing Core Engine... -->
+        <!-- STREAMING_CHUNK:Workbook Parsing Core Engine With Pipe Handling... -->
         function parseWorkbook(workbook) {
             globalData = {
                 sheets: workbook.SheetNames,
@@ -458,7 +469,7 @@
                 const firstSubjectCol = lastStudentInfoCol + 1;
                 const subHeaderRow = rawData[subHeaderRowIdx] || [];
 
-                // 4. Helper to detect summary columns at end of sheet
+                // Helper to detect summary columns at end of sheet
                 const isSummaryColumn = (cIdx) => {
                     for (let r = Math.max(0, subHeaderRowIdx - 3); r <= subHeaderRowIdx; r++) {
                         const val = normalizeText(rawData[r] ? rawData[r][cIdx] : '');
@@ -473,7 +484,7 @@
                     return false;
                 };
 
-                // 5. Extract Subject Names & Column Mapping
+                // 4. Extract Subject Names & Column Mapping
                 let subjectsInSheet = [];
                 let maxCols = 0;
                 for (let r = 0; r < Math.min(subHeaderRowIdx + 5, rawData.length); r++) {
@@ -517,7 +528,7 @@
                     }
                 }
 
-                // Map specific sub-columns for each subject
+                // Map sub-columns for each subject
                 subjectsInSheet.forEach(s => {
                     s.colTKHP = -1;
                     s.colDiemChu = -1;
@@ -549,7 +560,7 @@
                     }
                 });
 
-                // 6. Evaluate Student Rows accurately
+                // 5. Evaluate Student Rows accurately (Checking LATEST attempt after "|")
                 for (let r = subHeaderRowIdx + 1; r < rawData.length; r++) {
                     const row = rawData[r];
                     if (!row || row.length === 0) continue;
@@ -568,7 +579,6 @@
 
                     const dob = dobColIdx !== -1 ? String(row[dobColIdx] || '').trim() : '';
 
-                    // Validate if row is a real student row (Exclude "Số tín chỉ:", headers, summary rows)
                     const parsedStt = parseInt(sttVal, 10);
                     const isSttNumber = !isNaN(parsedStt) && parsedStt > 0 && String(sttVal).toLowerCase().indexOf('tín chỉ') === -1;
                     const isIdValid = id.length >= 6 && !id.toUpperCase().includes('MSSV') && !id.toUpperCase().includes('MÃ');
@@ -577,20 +587,26 @@
                         let studentDebts = [];
 
                         subjectsInSheet.forEach(subj => {
-                            const tkhp = subj.colTKHP !== -1 ? row[subj.colTKHP] : null;
-                            const diemChu = subj.colDiemChu !== -1 ? row[subj.colDiemChu] : null;
-                            const danhGia = subj.colDanhGia !== -1 ? row[subj.colDanhGia] : null;
+                            const rawTkhp = subj.colTKHP !== -1 ? row[subj.colTKHP] : null;
+                            const rawDiemChu = subj.colDiemChu !== -1 ? row[subj.colDiemChu] : null;
+                            const rawDanhGia = subj.colDanhGia !== -1 ? row[subj.colDanhGia] : null;
+
+                            // EXTRACT LATEST ATTEMPT (AFTER "|")
+                            const latestTkhpStr = getLatestAttempt(rawTkhp);
+                            const latestDiemChuStr = getLatestAttempt(rawDiemChu);
+                            const latestDanhGiaStr = getLatestAttempt(rawDanhGia);
+
+                            const normDanhGia = normalizeText(latestDanhGiaStr);
+                            const normDiemChu = normalizeText(latestDiemChuStr);
 
                             let isDebt = false;
                             let reason = '';
 
-                            const normDanhGia = normalizeText(danhGia);
-                            const normDiemChu = normalizeText(diemChu);
-                            const rawTkhpStr = String(tkhp !== null && tkhp !== undefined ? tkhp : '').trim();
-
+                            // Check if latest attempt is explicitly passed
                             const isExplicitPass = normDiemChu === 'P' || normDiemChu === 'M' || normDiemChu === 'DAT' || 
                                                    normDiemChu === 'PASS' || normDanhGia === 'DAT' || normDanhGia === 'PASS' || 
-                                                   normDanhGia === 'MIEN' || normDanhGia === 'HOAN';
+                                                   normDanhGia === 'MIEN' || normDanhGia === 'HOAN' ||
+                                                   ['A', 'A+', 'B+', 'B', 'C+', 'C', 'D+', 'D'].includes(normDiemChu);
 
                             if (!isExplicitPass) {
                                 if (normDanhGia.includes('HOC LAI') || normDanhGia.includes('THI LAI') || 
@@ -600,17 +616,17 @@
                                     normDanhGia.includes('VANG THI') || normDanhGia === 'NO' || 
                                     normDanhGia === 'FAIL' || normDanhGia === 'KD' || normDanhGia === 'VT' || normDanhGia === 'CT') {
                                     isDebt = true;
-                                    reason = String(danhGia || 'Chưa đạt / Học lại');
+                                    reason = String(rawDanhGia || 'Chưa đạt / Học lại');
                                 } 
                                 else if (normDiemChu === 'F' || normDiemChu.startsWith('F(') || normDiemChu === 'F*' || normDiemChu === 'F+' || normDiemChu === 'KD' || normDiemChu === 'VT' || normDiemChu === 'CT') {
                                     isDebt = true;
-                                    reason = `Điểm chữ: ${diemChu}`;
+                                    reason = `Điểm chữ: ${rawDiemChu}`;
                                 } 
-                                else if (rawTkhpStr !== '' && !isNaN(Number(rawTkhpStr))) {
-                                    const numTkhp = Number(rawTkhpStr);
+                                else if (latestTkhpStr !== '' && !isNaN(Number(latestTkhpStr))) {
+                                    const numTkhp = Number(latestTkhpStr);
                                     if (numTkhp >= 0 && numTkhp < 4.0) {
                                         isDebt = true;
-                                        reason = `TKHP: ${numTkhp} (< 4.0)`;
+                                        reason = `TKHP: ${rawTkhp} (< 4.0)`;
                                     }
                                 }
                             }
@@ -618,9 +634,9 @@
                             if (isDebt) {
                                 studentDebts.push({
                                     subjectName: subj.name,
-                                    tkhp: tkhp,
-                                    diemChu: diemChu,
-                                    danhGia: danhGia,
+                                    tkhp: rawTkhp,
+                                    diemChu: rawDiemChu,
+                                    danhGia: rawDanhGia,
                                     reason: reason
                                 });
 
@@ -630,8 +646,8 @@
                                     name: fullName || 'Chưa rõ tên',
                                     className: sheetName,
                                     reason: reason,
-                                    tkhp: tkhp,
-                                    diemChu: diemChu
+                                    tkhp: rawTkhp,
+                                    diemChu: rawDiemChu
                                 });
                             }
                         });
@@ -798,7 +814,7 @@
                     <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
                         <div>
                             <div class="font-bold text-slate-800 text-sm">${cls}</div>
-                            <div class="text-xs text-slate-500 mt-0.5">${studentsInClass.length} SV • <span class="text-rose-600 font-medium">${debtInClass.length} SV nợ môn</span></div>
+                            <div class="text-xs text-slate-500 mt-0.5">${studentsInClass.length} SV • <span class="text-rose-600 font-medium">${debtInClass.length} SV đang nợ môn</span></div>
                         </div>
                         <div class="text-right">
                             <span class="text-xs font-bold px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg">${classRatio}% nợ</span>
@@ -829,7 +845,7 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Số sinh viên nợ môn',
+                        label: 'Số sinh viên đang nợ môn',
                         data: dataValues,
                         backgroundColor: 'rgba(239, 68, 68, 0.75)',
                         borderColor: 'rgba(220, 38, 38, 1)',
@@ -900,7 +916,7 @@
                 const hasDebt = st.debts.length > 0;
                 const statusBadge = hasDebt 
                     ? `<span class="px-3 py-1 rounded-full bg-rose-100 text-rose-700 font-bold text-xs"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Nợ ${st.debts.length} môn</span>`
-                    : `<span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs"><i class="fa-solid fa-check mr-1"></i>Đạt 100%</span>`;
+                    : `<span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs"><i class="fa-solid fa-check mr-1"></i>Đạt / Sạch nợ</span>`;
 
                 let debtsListHTML = '';
                 if (hasDebt) {
@@ -908,7 +924,7 @@
                         <div class="flex items-center justify-between p-3 bg-rose-50/60 rounded-xl border border-rose-100 text-xs">
                             <div>
                                 <span class="font-bold text-slate-800">${d.subjectName}</span>
-                                <div class="text-rose-600 mt-0.5">Lý do: ${d.reason}</div>
+                                <div class="text-rose-600 mt-0.5">Trạng thái: ${d.reason}</div>
                             </div>
                             <div class="text-right">
                                 <span class="font-bold text-rose-700 bg-white px-2.5 py-1 rounded-lg border border-rose-200">
@@ -999,7 +1015,7 @@
                         </div>
 
                         <div class="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
-                            <span class="text-xs text-slate-500">${hasDebts ? 'Cần tổ chức thi/học lại' : 'Tất cả SV đạt'}</span>
+                            <span class="text-xs text-slate-500">${hasDebts ? 'Cần tổ chức thi/học lại' : 'Tất cả SV đã đạt'}</span>
                             ${hasDebts ? `
                                 <button onclick="openSubjectModal('${encodeURIComponent(subj.name)}')" class="text-xs font-bold text-brand-600 hover:text-brand-800 bg-brand-50 px-3 py-1.5 rounded-xl transition-colors">
                                     Xem danh sách SV <i class="fa-solid fa-arrow-right ml-1"></i>
@@ -1017,7 +1033,7 @@
             if (!subj) return;
 
             document.getElementById('modalSubjectName').innerText = subj.name;
-            document.getElementById('modalSubjectSubtitle').innerText = `Tổng cộng: ${subj.totalDebts} sinh viên chưa đạt`;
+            document.getElementById('modalSubjectSubtitle').innerText = `Tổng cộng: ${subj.totalDebts} sinh viên đang nợ môn này`;
 
             const modalList = document.getElementById('modalStudentList');
             modalList.innerHTML = '';
@@ -1059,17 +1075,17 @@
                             "Họ Và Tên": st.name,
                             "Ngày Sinh": st.dob,
                             "Môn Học Nợ": d.subjectName,
-                            "Tổng Kết Học Phần (TKHP)": d.tkhp !== null && d.tkhp !== undefined ? d.tkhp : '',
-                            "Điểm Chữ": d.diemChu || '',
-                            "Đánh Giá": d.danhGia || '',
-                            "Lý Do Nợ": d.reason
+                            "Lịch Sử TKHP": d.tkhp !== null && d.tkhp !== undefined ? d.tkhp : '',
+                            "Lịch Sử Điểm Chữ": d.diemChu || '',
+                            "Lịch Sử Đánh Giá": d.danhGia || '',
+                            "Lý Do Nợ Hiện Tại": d.reason
                         });
                     });
                 }
             });
 
             if (exportRows.length === 0) {
-                showCustomMessage("Không có sinh viên nào nợ môn để xuất báo cáo!");
+                showCustomMessage("Tất cả sinh viên đều đã đạt/sạch nợ, không có dữ liệu nợ để xuất!");
                 return;
             }
 
