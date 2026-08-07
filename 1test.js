@@ -539,6 +539,7 @@ function switchTab(tabName) {
     document.getElementById(`tabContent-${tabName}`).classList.remove('hidden');
 
     if (tabName === 'overview') renderOverviewTab();
+    else if (tabName === 'students' && globalData.students.length > 0) renderStudentsTab();
     else if (tabName === 'students') renderStudentsTab();
     else if (tabName === 'subjects') renderSubjectsTab();
     else if (tabName === 'logs') renderLogsTab();
@@ -549,22 +550,35 @@ function renderDashboard() {
     const uploadSection = document.getElementById('uploadSection');
     const dashboardSection = document.getElementById('dashboardSection');
     const headerActions = document.getElementById('headerActions');
+    const emptyStateContainer = document.getElementById('emptyStateContainer');
+    const dataDependentContent = document.getElementById('dataDependentContent');
 
     // Always show the dashboard, hide the initial full-page upload section
     if (uploadSection) uploadSection.classList.add('hidden');
     if (dashboardSection) dashboardSection.classList.remove('hidden');
 
     if (hasData) {
+        // --- STATE: CÓ DỮ LIỆU ---
         if (headerActions) headerActions.classList.remove('hidden');
-        // If there's data, switch to the overview tab by default
-        // and ensure the empty state is hidden.
-        document.getElementById('emptyStateContainer').classList.add('hidden');
-        switchTab(currentTab); // Stay on current tab or switch to default
+        if (emptyStateContainer) emptyStateContainer.classList.add('hidden');
+        if (dataDependentContent) dataDependentContent.classList.remove('hidden');
+
+        // Hiển thị các tab liên quan đến dữ liệu
+        document.getElementById('tabBtn-overview').classList.remove('hidden');
+        document.getElementById('tabBtn-students').classList.remove('hidden');
+        document.getElementById('tabBtn-subjects').classList.remove('hidden');
+
+        switchTab(currentTab);
     } else {
-        // If there's no data, hide data-dependent tabs and show the empty state
+        // --- STATE: CHƯA CÓ DỮ LIỆU ---
         if (headerActions) headerActions.classList.add('hidden');
-        document.getElementById('emptyStateContainer').classList.remove('hidden');
-        // Default to the logs tab if no data, as it can function independently
+        if (emptyStateContainer) emptyStateContainer.classList.remove('hidden');
+        if (dataDependentContent) dataDependentContent.classList.add('hidden');
+
+        // Chỉ hiển thị tab "Nhật ký" vì nó không phụ thuộc dữ liệu
+        document.getElementById('tabBtn-overview').classList.add('hidden');
+        document.getElementById('tabBtn-students').classList.add('hidden');
+        document.getElementById('tabBtn-subjects').classList.add('hidden');
         switchTab('logs');
     }
 }
