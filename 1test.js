@@ -145,9 +145,6 @@ function processFile(file) {
                 
                 parseWorkbook(workbook);
                 
-                document.getElementById('uploadSection').classList.add('hidden');
-                document.getElementById('dashboardSection').classList.remove('hidden');
-                document.getElementById('headerActions').classList.remove('hidden');
                 // Data is loaded, re-render the dashboard
                 renderDashboard();
             } catch (err) {
@@ -510,10 +507,6 @@ function loadDemoData() {
         });
     });
 
-    document.getElementById('uploadSection').classList.add('hidden');
-    document.getElementById('dashboardSection').classList.remove('hidden');
-    document.getElementById('headerActions').classList.remove('hidden');
-
     populateFilters();
     renderDashboard();
     showCustomMessage("Đã nạp dữ liệu mẫu thử nghiệm thành công!");
@@ -552,7 +545,6 @@ function switchTab(tabName) {
 }
 
 function renderDashboard() {
-    switchTab('overview');
     const hasData = globalData.students.length > 0;
     const uploadSection = document.getElementById('uploadSection');
     const dashboardSection = document.getElementById('dashboardSection');

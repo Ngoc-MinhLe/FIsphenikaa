@@ -79,7 +79,7 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
 
         <!-- STREAMING_CHUNK:File Upload & Drag-and-Drop Zone... -->
-        <div id="uploadSection" class="max-w-2xl mx-auto mt-8 bg-white p-8 sm:p-12 rounded-3xl shadow-xl border-2 border-dashed border-indigo-200 text-center relative overflow-hidden transition-all duration-300 hover:border-brand-500">
+        <div id="uploadSection" class="hidden max-w-2xl mx-auto mt-8 bg-white p-8 sm:p-12 rounded-3xl shadow-xl border-2 border-dashed border-indigo-200 text-center relative overflow-hidden transition-all duration-300 hover:border-brand-500">
             <div class="absolute -top-12 -right-12 w-40 h-40 bg-indigo-50 rounded-full blur-2xl opacity-60 pointer-events-none"></div>
             <div class="absolute -bottom-12 -left-12 w-40 h-40 bg-purple-50 rounded-full blur-2xl opacity-60 pointer-events-none"></div>
             
@@ -113,7 +113,7 @@
         </div>
 
         <!-- STREAMING_CHUNK:Dashboard View & Statistics Section... -->
-        <div id="dashboardSection" class="hidden space-y-8">
+        <div id="dashboardSection" class="space-y-8">
 
             <div class="flex flex-wrap items-center justify-between border-b border-slate-200 pb-4 gap-4">
                 <div class="flex gap-2 p-1.5 bg-slate-200/60 rounded-2xl">
@@ -207,6 +207,30 @@
                         <div id="classListContainer" class="space-y-4 custom-scrollbar overflow-y-auto max-h-72 pr-2 flex-1">
                             <!-- Class items dynamically injected -->
                         </div>
+                    </div>
+                </div>
+
+                <!-- Empty State - Shown when no data is loaded -->
+                <div id="emptyStateContainer" class="hidden text-center bg-white p-12 rounded-3xl border border-slate-100 shadow-sm">
+                    <div class="w-20 h-20 bg-indigo-50 rounded-3xl mx-auto flex items-center justify-center text-brand-600 text-3xl mb-6 shadow-inner">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-800">Chưa có dữ liệu để phân tích</h3>
+                    <p class="text-slate-500 text-sm mt-2 mb-6 max-w-md mx-auto">Vui lòng tải lên tệp bảng điểm Excel để bắt đầu xem các thống kê chi tiết về sinh viên và môn học.</p>
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <label for="excelFileInput" class="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-8 py-4 rounded-2xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 cursor-pointer transition-all duration-200 group">
+                            <i class="fa-solid fa-file-arrow-up text-lg group-hover:scale-110 transition-transform"></i>
+                            <span>Chọn Tệp Excel Từ Máy Tính</span>
+                        </label>
+    
+                        <button onclick="loadDemoData()" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-6 py-4 rounded-2xl transition-all duration-200 border border-slate-200">
+                            <i class="fa-solid fa-wand-magic-sparkles text-amber-500"></i>
+                            <span>Nạp Dữ Liệu Mẫu (Demo)</span>
+                        </button>
+                    </div>
+                    <div id="loadingSpinner" class="hidden mt-8 flex flex-col items-center justify-center gap-3">
+                        <div class="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
+                        <span class="text-sm font-medium text-slate-600">Đang quét bóc tách lịch sử điểm thi lại / học lại...</span>
                     </div>
                 </div>
             </div>
