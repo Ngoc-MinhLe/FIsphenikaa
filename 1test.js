@@ -54,6 +54,9 @@ window.addEventListener('DOMContentLoaded', () => {
             showCustomMessage("Chưa đăng nhập! Vui lòng đăng nhập ở trang chính để sử dụng tính năng lưu log.", "error");
         }
     });
+
+    // Render the initial view
+    renderDashboard();
 });
 
 function setupDragAndDrop() {
@@ -142,9 +145,8 @@ function processFile(file) {
                 
                 parseWorkbook(workbook);
                 
-                document.getElementById('uploadSection').classList.add('hidden');
-                document.getElementById('dashboardSection').classList.remove('hidden');
-                document.getElementById('headerActions').classList.remove('hidden');
+                // Data is loaded, re-render the dashboard
+                renderDashboard();
             } catch (err) {
                 console.error("Error parsing Excel:", err);
                 showCustomMessage("Có lỗi xảy ra khi đọc tệp Excel. Vui lòng kiểm tra lại định dạng tệp!", "error");
@@ -505,10 +507,6 @@ function loadDemoData() {
         });
     });
 
-    document.getElementById('uploadSection').classList.add('hidden');
-    document.getElementById('dashboardSection').classList.remove('hidden');
-    document.getElementById('headerActions').classList.remove('hidden');
-
     populateFilters();
     renderDashboard();
     showCustomMessage("Đã nạp dữ liệu mẫu thử nghiệm thành công!");
@@ -547,10 +545,33 @@ function switchTab(tabName) {
 }
 
 function renderDashboard() {
-    switchTab('overview');
+    const hasData = globalData.students.length > 0;
+    const uploadSection = document.getElementById('uploadSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const headerActions = document.getElementById('headerActions');
+
+    // Always show the dashboard, hide the initial full-page upload section
+    if (uploadSection) uploadSection.classList.add('hidden');
+    if (dashboardSection) dashboardSection.classList.remove('hidden');
+
+    if (hasData) {
+        if (headerActions) headerActions.classList.remove('hidden');
+        // If there's data, switch to the overview tab by default
+        // and ensure the empty state is hidden.
+        document.getElementById('emptyStateContainer').classList.add('hidden');
+        switchTab(currentTab); // Stay on current tab or switch to default
+    } else {
+        // If there's no data, hide data-dependent tabs and show the empty state
+        if (headerActions) headerActions.classList.add('hidden');
+        document.getElementById('emptyStateContainer').classList.remove('hidden');
+        // Default to the logs tab if no data, as it can function independently
+        switchTab('logs');
+    }
 }
 
 function renderOverviewTab() {
+    if (globalData.students.length === 0) return; // Don't render if no data
+
     const totalStudents = globalData.students.length;
     const debtStudents = globalData.students.filter(s => s.debts.length > 0);
     const debtStudentCount = debtStudents.length;
@@ -658,6 +679,8 @@ function renderChart() {
 }
 
 function renderStudentsTab() {
+    if (globalData.students.length === 0) return; // Don't render if no data
+
     const searchQuery = normalizeText(document.getElementById('studentSearchInput').value);
     const classFilter = document.getElementById('classFilterSelect').value;
     const debtFilter = document.getElementById('debtFilterSelect').value;
@@ -758,6 +781,8 @@ function toggleAccordion(id) {
 }
 
 function renderSubjectsTab() {
+    if (globalData.students.length === 0) return; // Don't render if no data
+
     const searchQuery = normalizeText(document.getElementById('subjectSearchInput').value);
     const container = document.getElementById('subjectsGridContainer');
     container.innerHTML = '';
