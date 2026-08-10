@@ -1,1000 +1,479 @@
 <!DOCTYPE html>
-<html lang="vi" class="h-full bg-slate-50">
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thống kê & Phân tích Nợ môn Sinh viên</title>
-    <!-- Tailwind CSS -->
+    <title>Hệ Thống Phân Tích Nợ Môn Sinh Viên - Phenikaa Portal</title>
+    <link rel="icon" type="image/png" href="https://www.phenikaa.com/logo192.png">
+
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SheetJS Excel Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Chart.js -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f4f6fa',
+                            100: '#e9ecf5',
+                            200: '#c8d1e9',
+                            500: '#1e3a8a',
+                            600: '#1d4ed8',
+                            700: '#00205b', // Phenikaa Navy Blue
+                            800: '#001744',
+                            900: '#000e2b'
+                        },
+                        phenikaa: {
+                            blue: '#00205b',
+                            orange: '#f26f21'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome & External Libraries -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .drop-active { border-color: #f26f21 !important; background-color: #fffaf0 !important; transform: scale(1.01); }
     </style>
 </head>
-<body class="h-full flex flex-col text-slate-800 bg-slate-50">
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <!-- Top Header -->
-    <header class="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white shadow-md sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div class="flex items-center space-x-3">
-                <div class="bg-white/10 p-2.5 rounded-xl backdrop-blur-md">
-                    <i data-lucide="graduation-cap" class="w-8 h-8 text-blue-200"></i>
+    <!-- Header Component -->
+    <header class="bg-gradient-to-r from-brand-900 via-brand-700 to-brand-800 text-white shadow-lg border-t-4 border-phenikaa-orange">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-4">
+                <div class="p-2.5 bg-white rounded-2xl shadow-inner flex items-center justify-center">
+                    <img src="https://www.phenikaa.com/logo192.png" alt="Phenikaa Logo" class="h-10">
                 </div>
                 <div>
-                    <h1 class="text-xl font-bold tracking-tight">Hệ Thống Phân Tích Nợ Môn Học Phần</h1>
-                    <p class="text-xs text-blue-200">Tự động đọc & chuẩn hóa Bảng điểm Toàn khóa Excel (.xlsx)</p>
+                    <h1 class="text-xl sm:text-2xl font-black tracking-tight">PHENIKAA<span class="text-phenikaa-orange"> PORTAL</span></h1>
+                    <p class="text-slate-200 text-xs sm:text-sm mt-0.5 font-medium"><i class="fa-solid fa-graduation-cap text-phenikaa-orange mr-1.5"></i>Hệ Thống Phân Tích Nợ Môn & Lập Kế Hoạch Tốt Nghiệp</p>
                 </div>
             </div>
-            
-            <!-- Quick Action Buttons -->
-            <div id="headerActions" class="hidden flex items-center gap-2">
-                <button onclick="triggerFileInput()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-medium rounded-lg transition-all">
-                    <i data-lucide="file-up" class="w-4 h-4"></i> Tải File Khác
+
+            <div id="headerActions" class="hidden flex items-center gap-3">
+                <button onclick="resetApp()" class="bg-white/10 hover:bg-white/20 text-white font-semibold px-4 py-2.5 rounded-xl border border-white/20 text-xs transition-all duration-200 flex items-center gap-2 shadow-sm backdrop-blur-sm">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>Tải File Khác</span>
                 </button>
-                <button onclick="exportToExcel()" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg shadow transition-all">
-                    <i data-lucide="download" class="w-4 h-4"></i> Xuất Báo Cáo
+                
+                <button onclick="exportToExcel()" class="bg-phenikaa-orange hover:bg-orange-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center gap-2 shadow-md">
+                    <i class="fa-solid fa-file-export"></i>
+                    <span>Xuất Báo Cáo Excel</span>
                 </button>
             </div>
         </div>
     </header>
 
-    <!-- Main Content Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-6">
+    <!-- Main Content Area -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
 
-        <!-- Hidden File Input -->
-        <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleFileSelect(event)">
+        <!-- File Upload & Drag-and-Drop Zone -->
+        <div id="uploadSection" class="hidden max-w-4xl mx-auto mt-4 bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200/60 relative overflow-hidden transition-all duration-300">
+            <div class="absolute -top-12 -right-12 w-40 h-40 bg-orange-50/50 rounded-full blur-2xl opacity-60 pointer-events-none"></div>
+            <div class="absolute -bottom-12 -left-12 w-40 h-40 bg-blue-50/50 rounded-full blur-2xl opacity-60 pointer-events-none"></div>
+            
+            <div class="relative z-10 pointer-events-auto text-center">
+                <h2 class="text-2xl font-extrabold text-slate-800 mb-2">Tải Lên Dữ Liệu Excel</h2>
+                <p class="text-slate-500 text-sm mb-8 leading-relaxed max-w-lg mx-auto">Vui lòng chọn bảng điểm toàn khóa của sinh viên để bóc tách nợ môn, và tùy chọn tải lên khung chương trình đào tạo để đối sánh lộ trình tốt nghiệp.</p>
 
-        <!-- File Upload Screen (Initial State) -->
-        <section id="uploadSection" class="my-auto py-12 flex flex-col items-center justify-center">
-            <div class="max-w-xl w-full bg-white rounded-2xl shadow-xl border border-slate-200/80 p-8 text-center space-y-6 transition-all hover:border-blue-300">
-                <div class="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                    <i data-lucide="file-spreadsheet" class="w-10 h-10"></i>
+                <!-- Two Upload Slots Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8">
+                    <!-- Zone 1: Student grades sheet -->
+                    <div id="studentDropZone" class="bg-slate-50/50 p-6 rounded-3xl border-2 border-dashed border-slate-200 hover:border-brand-700 transition-all flex flex-col items-center justify-center text-center cursor-pointer relative group">
+                        <input type="file" id="studentFileInput" accept=".xlsx, .xls" class="hidden">
+                        <div class="w-16 h-16 bg-blue-50 text-brand-700 rounded-2xl flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-user-graduate"></i>
+                        </div>
+                        <h4 class="font-bold text-slate-800 text-sm">1. Bảng Điểm Toàn Khóa</h4>
+                        <p class="text-xs text-slate-500 mt-1 max-w-xs">Kéo thả hoặc nhấp vào đây để chọn tệp điểm sinh viên (.xlsx)</p>
+                        <span id="studentFileStatus" class="mt-4 px-3.5 py-1 bg-slate-200/60 text-slate-600 rounded-xl text-xs font-bold transition-all">Chưa tải lên</span>
+                    </div>
+                    
+                    <!-- Zone 2: Curriculum Framework -->
+                    <div id="frameworkDropZone" class="bg-slate-50/50 p-6 rounded-3xl border-2 border-dashed border-slate-200 hover:border-brand-700 transition-all flex flex-col items-center justify-center text-center cursor-pointer relative group">
+                        <input type="file" id="frameworkFileInput" accept=".xlsx, .xls" class="hidden">
+                        <div class="w-16 h-16 bg-orange-50 text-phenikaa-orange rounded-2xl flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-list-check"></i>
+                        </div>
+                        <h4 class="font-bold text-slate-800 text-sm">2. Khung Đào Tạo</h4>
+                        <p class="text-xs text-slate-500 mt-1 max-w-xs">Kéo thả hoặc nhấp vào đây để chọn tệp khung đào tạo (.xlsx)</p>
+                        <span id="frameworkFileStatus" class="mt-4 px-3.5 py-1 bg-slate-200/60 text-slate-600 rounded-xl text-xs font-bold transition-all">Chưa tải lên (Tùy chọn)</span>
+                    </div>
                 </div>
                 
-                <div class="space-y-2">
-                    <h2 class="text-2xl font-bold text-slate-800">Tải Lên Bảng Điểm Toàn Khóa</h2>
-                    <p class="text-sm text-slate-500">Hỗ trợ định dạng file Excel `.xlsx` mẫu K17-KTPM (tự động xử lý tất cả các sheet trong file)</p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button id="btnAnalyze" onclick="startAnalysis()" class="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-brand-700 hover:bg-brand-800 disabled:bg-slate-300 text-white font-bold px-10 py-4 rounded-2xl shadow-lg cursor-pointer transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fa-solid fa-wand-magic-sparkles text-lg"></i>
+                        <span>Bắt Đầu Phân Tích & Đối Sánh</span>
+                    </button>
+
+                    <button onclick="loadDemoData()" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-8 py-4 rounded-2xl transition-all duration-200 border border-slate-200">
+                        <i class="fa-solid fa-wand-magic-sparkles text-phenikaa-orange"></i>
+                        <span>Nạp Dữ Liệu Mẫu (Demo)</span>
+                    </button>
                 </div>
 
-                <!-- Dropzone Area -->
-                <div id="dropZone" onclick="triggerFileInput()" 
-                     class="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-blue-50/50 rounded-xl p-8 cursor-pointer transition-all flex flex-col items-center justify-center gap-3">
-                    <i data-lucide="upload-cloud" class="w-10 h-10 text-slate-400"></i>
-                    <div class="text-sm font-medium text-slate-700">
-                        Nhấp vào đây để chọn file hoặc Kéo & Thả file Excel vào đây
-                    </div>
-                    <p class="text-xs text-slate-400">Chỉ chấp nhận file .xlsx hoặc .xls</p>
-                </div>
-
-                <!-- Feature Badges -->
-                <div class="grid grid-cols-3 gap-3 pt-2 text-xs text-slate-600">
-                    <div class="bg-slate-100 p-2.5 rounded-lg flex items-center justify-center gap-1.5">
-                        <i data-lucide="users" class="w-4 h-4 text-blue-600"></i> Theo Sinh Viên
-                    </div>
-                    <div class="bg-slate-100 p-2.5 rounded-lg flex items-center justify-center gap-1.5">
-                        <i data-lucide="book-open" class="w-4 h-4 text-indigo-600"></i> Theo Môn Học
-                    </div>
-                    <div class="bg-slate-100 p-2.5 rounded-lg flex items-center justify-center gap-1.5">
-                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i> Thống Kê Tổng Quan
-                    </div>
+                <div id="loadingSpinner" class="hidden mt-8 flex flex-col items-center justify-center gap-3">
+                    <div class="w-8 h-8 border-4 border-phenikaa-orange border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-sm font-semibold text-slate-600 animate-pulse">Đang quét bóc tách lịch sử điểm thi lại / học lại...</span>
                 </div>
             </div>
-        </section>
+        </div>
 
-        <!-- Analytics Dashboard (Shown after file load) -->
-        <div id="dashboardSection" class="hidden flex-col gap-6">
+        <!-- Dashboard View & Statistics Section -->
+        <div id="dashboardSection" class="space-y-8">
 
-            <!-- Summary KPI Cards Grid -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p class="text-xs font-medium text-slate-500">Tổng Số Sinh Viên</p>
-                        <p id="kpiTotalStudents" class="text-2xl font-extrabold text-slate-800 mt-1">0</p>
-                        <span id="kpiClassesCount" class="text-xs text-slate-400">0 lớp/sheet</span>
-                    </div>
-                    <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
-                        <i data-lucide="users" class="w-6 h-6"></i>
-                    </div>
+            <div class="flex flex-wrap items-center justify-between border-b border-slate-200 pb-4 gap-4">
+                <div class="flex gap-2 p-1.5 bg-slate-200/60 rounded-2xl">
+                    <button onclick="switchTab('overview')" id="tabBtn-overview" class="tab-btn px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 bg-white text-brand-700 shadow-sm">
+                        <i class="fa-solid fa-chart-pie mr-2"></i>Tổng Quan & Biểu Đồ
+                    </button>
+                    <button onclick="switchTab('students')" id="tabBtn-students" class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 hover:text-slate-900 transition-all duration-200">
+                        <i class="fa-solid fa-user-graduate mr-2"></i>Thống Kê Theo Sinh Viên
+                    </button>
+                    <button onclick="switchTab('subjects')" id="tabBtn-subjects" class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 hover:text-slate-900 transition-all duration-200">
+                        <i class="fa-solid fa-book-bookmark mr-2"></i>Thống Kê Theo Môn Học
+                    </button>
+                    <button onclick="switchTab('logs')" id="tabBtn-logs" class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 hover:text-slate-900 transition-all duration-200">
+                        <i class="fa-solid fa-clock-rotate-left mr-2"></i>Nhật Ký Thông Báo
+                    </button>
                 </div>
 
-                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p class="text-xs font-medium text-slate-500">Sinh Viên Còn Nợ Môn</p>
-                        <p id="kpiDebtorStudents" class="text-2xl font-extrabold text-amber-600 mt-1">0</p>
-                        <span id="kpiDebtorRate" class="text-xs text-amber-600 font-semibold">0% tổng số</span>
-                    </div>
-                    <div class="p-3 bg-amber-50 text-amber-600 rounded-xl">
-                        <i data-lucide="user-x" class="w-6 h-6"></i>
-                    </div>
-                </div>
-
-                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p class="text-xs font-medium text-slate-500">Tổng Môn Học Toàn Khóa</p>
-                        <p id="kpiTotalSubjects" class="text-2xl font-extrabold text-indigo-600 mt-1">0</p>
-                        <span id="kpiDebtedSubjectsCount" class="text-xs text-indigo-500">0 môn có SV nợ</span>
-                    </div>
-                    <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
-                        <i data-lucide="book-marked" class="w-6 h-6"></i>
-                    </div>
-                </div>
-
-                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p class="text-xs font-medium text-slate-500">Lượt Môn Học Lại (Học Lại)</p>
-                        <p id="kpiTotalFailCount" class="text-2xl font-extrabold text-rose-600 mt-1">0</p>
-                        <span id="kpiAvgDebtsPerStudent" class="text-xs text-rose-500">TB 0 môn/SV nợ</span>
-                    </div>
-                    <div class="p-3 bg-rose-50 text-rose-600 rounded-xl">
-                        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
-                    </div>
+                <div id="lastUpdated" class="text-xs font-semibold text-slate-600 bg-white px-3.5 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-circle-check text-emerald-500"></i>
+                    <span id="sheetCountBadge">0 Sheet</span>
+                    <span id="frameworkLoadedBadge" class="hidden px-2 py-0.5 bg-orange-100 text-phenikaa-orange font-bold text-[10px] rounded-md">Có Khung Đào Tạo</span>
                 </div>
             </div>
 
-            <!-- Tab Navigation Bar -->
-            <div class="bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap gap-1">
-                <button onclick="switchTab('overview')" id="tabBtn-overview" 
-                        class="tab-btn active flex-1 min-w-[130px] py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all bg-blue-600 text-white shadow-sm">
-                    <i data-lucide="pie-chart" class="w-4 h-4"></i> Tổng Quan & Biểu Đồ
-                </button>
-                <button onclick="switchTab('students')" id="tabBtn-students" 
-                        class="tab-btn flex-1 min-w-[130px] py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 flex items-center justify-center gap-2 transition-all">
-                    <i data-lucide="user-check" class="w-4 h-4"></i> Thống Kê Theo Sinh Viên
-                </button>
-                <button onclick="switchTab('subjects')" id="tabBtn-subjects" 
-                        class="tab-btn flex-1 min-w-[130px] py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 flex items-center justify-center gap-2 transition-all">
-                    <i data-lucide="book-open" class="w-4 h-4"></i> Thống Kê Theo Môn Học
-                </button>
+            <!-- Empty State - Shown when no data is loaded -->
+            <div id="emptyStateContainer" class="hidden text-center bg-white p-12 rounded-3xl border border-slate-100 shadow-sm">
+                <div class="w-20 h-20 bg-slate-50 rounded-3xl mx-auto flex items-center justify-center text-brand-700 text-3xl mb-6 shadow-inner">
+                    <i class="fa-solid fa-file-invoice"></i>
+                </div>
+                <h3 class="text-xl font-extrabold text-slate-800">Chưa có dữ liệu để phân tích</h3>
+                <p class="text-slate-500 text-sm mt-2 mb-6 max-w-md mx-auto">Vui lòng tải lên tệp bảng điểm Excel để bắt đầu xem các thống kê chi tiết về sinh viên và môn học.</p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button onclick="resetApp()" class="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-brand-700 hover:bg-brand-800 text-white font-bold px-8 py-4 rounded-2xl shadow-lg cursor-pointer transition-all duration-200">
+                        <i class="fa-solid fa-file-arrow-up text-lg"></i>
+                        <span>Tải Lên Tệp Excel</span>
+                    </button>
+
+                    <button onclick="loadDemoData()" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-8 py-4 rounded-2xl transition-all duration-200 border border-slate-200">
+                        <i class="fa-solid fa-wand-magic-sparkles text-phenikaa-orange"></i>
+                        <span>Nạp Dữ Liệu Mẫu (Demo)</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- TAB 1: OVERVIEW & CHARTS -->
-            <div id="tabContent-overview" class="tab-content space-y-6">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- Top Failed Subjects Chart -->
-                    <div class="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
-                        <div class="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 class="font-bold text-slate-800 text-base">Top 10 Môn Học Có Sinh Viên Nợ Nhiều Nhất</h3>
-                                <p class="text-xs text-slate-500">Danh sách môn có tỷ lệ trượt / học lại cao nhất</p>
+            <div id="dataDependentContent" class="hidden">
+                <!-- Tab 1: Overview Cards & Charts -->
+                <div id="tabContent-overview" class="tab-content space-y-8">
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Tổng Số Sinh Viên</span>
+                                <div class="w-10 h-10 rounded-2xl bg-blue-50 text-brand-700 flex items-center justify-center">
+                                    <i class="fa-solid fa-users text-lg"></i>
+                                </div>
                             </div>
-                            <i data-lucide="bar-chart-3" class="w-5 h-5 text-slate-400"></i>
+                            <div class="text-3xl font-extrabold text-slate-800" id="kpiTotalStudents">0</div>
+                            <p class="text-xs text-slate-500 mt-2 font-medium" id="kpiClassDetail">0 Lớp / Sheet</p>
                         </div>
-                        <div class="relative flex-1 min-h-[300px]">
-                            <canvas id="topSubjectsChart"></canvas>
+
+                        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-xs font-bold uppercase tracking-wider text-amber-500">Sinh Viên Đang Nợ Môn</span>
+                                <div class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-user-xmark text-lg"></i>
+                                </div>
+                            </div>
+                            <div class="text-3xl font-extrabold text-amber-600" id="kpiDebtStudents">0</div>
+                            <p class="text-xs font-bold text-amber-600 mt-2" id="kpiDebtRatio">0% tổng số SV</p>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Số Môn Toàn Khóa</span>
+                                <div class="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-book-open text-lg"></i>
+                                </div>
+                            </div>
+                            <div class="text-3xl font-extrabold text-indigo-600" id="kpiTotalSubjects">0</div>
+                            <p class="text-xs text-slate-500 mt-2 font-medium" id="kpiSubjectsWithDebt">0 môn có SV nợ</p>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-xs font-bold uppercase tracking-wider text-rose-500">Tổng Lượt Nợ Hiện Tại</span>
+                                <div class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                                </div>
+                            </div>
+                            <div class="text-3xl font-extrabold text-rose-600" id="kpiTotalDebts">0</div>
+                            <p class="text-xs font-bold text-rose-500 mt-2" id="kpiAvgDebts">TB 0 môn / SV nợ</p>
                         </div>
                     </div>
 
-                    <!-- Class Breakdown Card -->
-                    <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
-                        <h3 class="font-bold text-slate-800 text-base mb-1">Phân Bộ Theo Lớp / Sheet</h3>
-                        <p class="text-xs text-slate-500 mb-4">Tỷ lệ nợ môn giữa các lớp trong file Excel</p>
-                        
-                        <div id="classListContainer" class="space-y-3 custom-scrollbar overflow-y-auto max-h-[300px] pr-1">
-                            <!-- Class items dynamically populated here -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-2 bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm">
+                            <div class="flex items-center justify-between mb-6">
+                                <div>
+                                    <h3 class="text-lg font-extrabold text-slate-800">Top 10 Môn Học Có Sinh Viên Nợ Nhiều Nhất</h3>
+                                    <p class="text-xs text-slate-500 mt-0.5">Danh sách môn học chưa xóa nợ cao nhất hiện tại</p>
+                                </div>
+                                <span class="p-2 bg-slate-100 rounded-xl text-slate-500 text-sm flex items-center justify-center"><i class="fa-solid fa-chart-column"></i></span>
+                            </div>
+                            <div class="h-80 w-full">
+                                <canvas id="topSubjectsChart"></canvas>
+                            </div>
                         </div>
+
+                        <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col">
+                            <h3 class="text-lg font-extrabold text-slate-800 mb-1">Phân Bộ Theo Lớp / Sheet</h3>
+                            <p class="text-xs text-slate-500 mb-6">Tỷ lệ nợ môn thực tế giữa các lớp</p>
+                            
+                            <div id="classListContainer" class="space-y-4 custom-scrollbar overflow-y-auto max-h-72 pr-2 flex-1">
+                                <!-- Class items dynamically injected -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Students List -->
+                <div id="tabContent-students" class="tab-content hidden space-y-6">
+                    <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+                        <div class="relative w-full md:w-96">
+                            <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input type="text" id="studentSearchInput" placeholder="Tìm kiếm họ tên, MSSV..." class="w-full pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:border-phenikaa-orange focus:ring-2 focus:ring-orange-500/10 transition-all">
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                            <select id="classFilterSelect" class="px-4 py-2.5 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:border-brand-700 bg-slate-50/50 text-slate-700 font-semibold">
+                                <option value="ALL">Tất cả Lớp / Sheet</option>
+                            </select>
+
+                            <select id="debtFilterSelect" class="px-4 py-2.5 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:border-brand-700 bg-slate-50/50 text-slate-700 font-semibold">
+                                <option value="ALL">Tất cả sinh viên</option>
+                                <option value="HAS_DEBT">Chỉ hiện SV đang nợ môn</option>
+                                <option value="NO_DEBT">Chỉ hiện SV đã sạch nợ / Đạt</option>
+                            </select>
+
+                            <button onclick="openSendModal()" class="px-4 py-2.5 rounded-2xl bg-brand-700 hover:bg-brand-800 text-white text-xs sm:text-sm font-bold transition-all shadow-md flex items-center gap-2">
+                                <i class="fa-solid fa-paper-plane"></i>
+                                <span>Gửi Hàng Loạt...</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="studentsListContainer" class="space-y-4">
+                        <!-- Student Cards Rendered Dynamically -->
+                    </div>
+                </div>
+
+                <!-- Tab 3: Subjects List -->
+                <div id="tabContent-subjects" class="tab-content hidden space-y-6">
+                    <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
+                        <div class="relative w-full sm:w-96">
+                            <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input type="text" id="subjectSearchInput" placeholder="Tìm kiếm tên môn học..." class="w-full pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:border-phenikaa-orange focus:ring-2 focus:ring-orange-500/10 transition-all">
+                        </div>
+
+                        <span id="subjectCounterText" class="text-sm font-bold text-slate-500">Tổng số 0 môn học</span>
+                    </div>
+
+                    <div id="subjectsGridContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        <!-- Subject Cards Rendered Dynamically -->
+                    </div>
+                </div>
+
+                <!-- Tab 4: Communication Logs -->
+                <div id="tabContent-logs" class="tab-content hidden space-y-6">
+                    <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-lg font-extrabold text-slate-800">Lịch sử thông báo nợ môn</h3>
+                                <p class="text-sm text-slate-500 mt-0.5">Các thông báo gửi đến sinh viên được ghi nhận trên hệ thống.</p>
+                            </div>
+                            <button onclick="renderLogsTab()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-2"><i class="fa-solid fa-arrows-rotate animate-spin-hover"></i> Tải lại</button>
+                        </div>
+                    </div>
+                    <div id="logsContainer" class="space-y-4">
+                        <!-- Log items will be rendered here -->
                     </div>
                 </div>
             </div>
-
-            <!-- TAB 2: BY STUDENT VIEW -->
-            <div id="tabContent-students" class="tab-content hidden space-y-4">
-                <!-- Search & Filters -->
-                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-                    <div class="relative w-full md:w-96">
-                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-                        <input type="text" id="studentSearchInput" oninput="renderStudentsList()" 
-                               placeholder="Tìm theo tên SV, MSSV..." 
-                               class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                        <select id="studentClassFilter" onchange="renderStudentsList()" 
-                                class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="ALL">Tất cả Lớp/Sheet</option>
-                        </select>
-
-                        <select id="studentDebtFilter" onchange="renderStudentsList()" 
-                                class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="DEBT_ONLY">Chỉ hiện SV còn nợ môn</option>
-                            <option value="ALL">Hiện tất cả sinh viên</option>
-                            <option value="CLEAN_ONLY">Chỉ hiện SV không nợ môn nào</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Students Count Subheader -->
-                <div class="flex items-center justify-between text-xs text-slate-500 px-1">
-                    <span id="studentsListCount">Hiển thị 0 sinh viên</span>
-                    <span>Bấm vào dòng để xem chi tiết môn nợ</span>
-                </div>
-
-                <!-- Students Debt Table -->
-                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-                    <div class="overflow-x-auto custom-scrollbar">
-                        <table class="w-full text-left text-xs border-collapse">
-                            <thead>
-                                <tr class="bg-slate-100/80 text-slate-600 font-semibold border-b border-slate-200">
-                                    <th class="py-3 px-4 w-12 text-center">STT</th>
-                                    <th class="py-3 px-4">Lớp / Sheet</th>
-                                    <th class="py-3 px-4">Mã Sinh Viên</th>
-                                    <th class="py-3 px-4">Họ và Tên</th>
-                                    <th class="py-3 px-4">Ngày Sinh</th>
-                                    <th class="py-3 px-4 text-center">Số Môn Nợ</th>
-                                    <th class="py-3 px-4">Danh Sách Môn Nợ</th>
-                                </tr>
-                            </thead>
-                            <tbody id="studentsTableBody" class="divide-y divide-slate-100">
-                                <!-- Student rows rendered here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 3: BY SUBJECT VIEW -->
-            <div id="tabContent-subjects" class="tab-content hidden space-y-4">
-                <!-- Search & Filters -->
-                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-                    <div class="relative w-full md:w-96">
-                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-                        <input type="text" id="subjectSearchInput" oninput="renderSubjectsList()" 
-                               placeholder="Tìm tên môn học, mã môn..." 
-                               class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    </div>
-
-                    <div class="flex items-center gap-3 w-full md:w-auto justify-end">
-                        <select id="subjectSortFilter" onchange="renderSubjectsList()" 
-                                class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option value="MOST_DEBT">Sắp xếp: Số SV nợ nhiều nhất</option>
-                            <option value="NAME_ASC">Sắp xếp: Tên môn A - Z</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Subjects Accordion / Cards List -->
-                <div id="subjectsListContainer" class="space-y-3">
-                    <!-- Subject cards populated here -->
-                </div>
-            </div>
-
         </div>
 
     </main>
 
-    <script>
-        // Global Application State
-        let parsedData = {
-            sheets: [],         // Sheet names
-            students: [],       // Array of all student objects
-            subjectsMap: {},    // Map of subjectCode/Name -> details + array of failed students
-            classStats: {}      // Sheet stats
-        };
-
-        let topChartInstance = null;
-
-        // On DOM Loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            lucide.createIcons();
-            setupDragAndDrop();
-        });
-
-        function triggerFileInput() {
-            document.getElementById('excelFileInput').click();
-        }
-
-        function setupDragAndDrop() {
-            const dropZone = document.getElementById('dropZone');
-            if (!dropZone) return;
-
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, preventDefaults, false);
-            });
-
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-
-            ['dragenter', 'dragover'].forEach(eventName => {
-                dropZone.addEventListener(eventName, () => dropZone.classList.add('bg-blue-100/50', 'border-blue-500'), false);
-            });
-
-            ['dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, () => dropZone.classList.remove('bg-blue-100/50', 'border-blue-500'), false);
-            });
-
-            dropZone.addEventListener('drop', (e) => {
-                const dt = e.dataTransfer;
-                const files = dt.files;
-                if (files && files.length > 0) {
-                    processFile(files[0]);
-                }
-            });
-        }
-
-        function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (file) {
-                processFile(file);
-            }
-        }
-
-        function processFile(file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    
-                    parseWorkbook(workbook);
-
-                    // Switch UI view
-                    document.getElementById('uploadSection').classList.add('hidden');
-                    document.getElementById('dashboardSection').classList.remove('hidden');
-                    document.getElementById('dashboardSection').classList.add('flex');
-                    document.getElementById('headerActions').classList.remove('hidden');
-
-                    // Render views
-                    updateKPIs();
-                    renderClassList();
-                    renderStudentsList();
-                    renderSubjectsList();
-                    renderChart();
-                    populateClassFilterOptions();
-
-                    showNotice('Đã phân tích chuẩn hóa thành công bảng điểm!', 'success');
-
-                } catch (err) {
-                    console.error(err);
-                    showNotice('Lỗi đọc file Excel: ' + err.message, 'error');
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function parseWorkbook(workbook) {
-            parsedData = {
-                sheets: workbook.SheetNames,
-                students: [],
-                subjectsMap: {},
-                classStats: {}
-            };
-
-            function normalizeText(str) {
-                if (str === null || str === undefined) return '';
-                return String(str)
-                    .normalize("NFD")
-                    .replace(/[\u0300-\u036f]/g, "")
-                    .replace(/đ/g, "d").replace(/Đ/g, "D")
-                    .toUpperCase()
-                    .trim();
-            }
-
-            workbook.SheetNames.forEach(sheetName => {
-                const worksheet = workbook.Sheets[sheetName];
-                const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
-
-                if (!matrix || matrix.length < 5) return;
-
-                // 1. Dynamic Search for Main Student Info Header Row
-                let mainHeaderIdx = -1;
-                for (let r = 0; r < Math.min(30, matrix.length); r++) {
-                    const row = matrix[r];
-                    if (!row) continue;
-                    const rowStr = row.map(c => normalizeText(c)).join(' ');
-                    if ((rowStr.includes('MSSV') || rowStr.includes('MA SO') || rowStr.includes('MA SV')) && 
-                        (rowStr.includes('HO TEN') || rowStr.includes('TEN') || rowStr.includes('HO'))) {
-                        mainHeaderIdx = r;
-                        break;
-                    }
-                }
-
-                if (mainHeaderIdx === -1) mainHeaderIdx = 8; // Fallback index
-
-                // Dynamic Column Position Resolution
-                let colStt = 0, colId = -1, colName = -1, colName2 = -1, colDob = -1;
-
-                for (let rDelta = -1; rDelta <= 1; rDelta++) {
-                    const r = mainHeaderIdx + rDelta;
-                    if (r < 0 || r >= matrix.length) continue;
-                    const row = matrix[r] || [];
-                    row.forEach((cell, colIdx) => {
-                        const norm = normalizeText(cell);
-                        if (norm === 'STT' || norm === 'TT') colStt = colIdx;
-                        if ((norm.includes('MSSV') || norm.includes('MA SV') || norm.includes('MA SO') || norm.includes('MASO')) && colId === -1) colId = colIdx;
-                        if ((norm.includes('HO TEN') || norm.includes('HOTEN') || norm.includes('HO VA TEN')) && colName === -1) colName = colIdx;
-                        if ((norm === 'HO' || norm === 'HO LOT' || norm === 'HO DEM') && colName === -1) colName = colIdx;
-                        if (norm === 'TEN' && colName !== -1 && colName2 === -1 && colIdx !== colName) colName2 = colIdx;
-                        if ((norm.includes('NGAY SINH') || norm.includes('NS') || norm.includes('DOB')) && colDob === -1) colDob = colIdx;
-                    });
-                }
-
-                // Fallback Defaults if missing
-                if (colId === -1) colId = 1;
-                if (colName === -1) colName = colId + 1;
-
-                // 2. Identify Subject Header Row & Sub-header Row
-                let subjectNameRowIdx = mainHeaderIdx;
-                if (mainHeaderIdx > 0) {
-                    let hasSubjectAbove = false;
-                    (matrix[mainHeaderIdx - 1] || []).forEach((cell, idx) => {
-                        if (idx > Math.max(colId, colName, colDob, 4) && cell && String(cell).trim().length > 3) {
-                            hasSubjectAbove = true;
-                        }
-                    });
-                    if (hasSubjectAbove) subjectNameRowIdx = mainHeaderIdx - 1;
-                }
-
-                let subHeaderIdx = mainHeaderIdx + 1;
-                if (subHeaderIdx >= matrix.length) subHeaderIdx = mainHeaderIdx;
-
-                const nameRow = matrix[subjectNameRowIdx] || [];
-                const subRow = matrix[subHeaderIdx] || [];
-
-                // Scan Subjects starting after student metadata
-                const startSearchCol = Math.max(colStt, colId, colName, colName2, colDob, 4) + 1;
-                
-                let subjectsInSheet = [];
-                let currentSubj = null;
-                let startCol = null;
-
-                const summaryKeywords = [
-                    'TONG SO', 'SO HOC PHAN', 'DIEM TRUNG BINH', 'XEP LOAI', 'TICH LUY', 
-                    'GPA', 'CBL', 'SO TC', 'TBCH', 'DTBC', 'TONG TC', 'SO TC NO', 'NO MON', 'SOTIENCAN'
-                ];
-
-                for (let c = startSearchCol; c < nameRow.length; c++) {
-                    const cellVal = nameRow[c] || matrix[mainHeaderIdx]?.[c];
-                    const strVal = cellVal ? String(cellVal).trim() : '';
-                    const normVal = normalizeText(strVal);
-
-                    if (summaryKeywords.some(kw => normVal.includes(kw))) {
-                        if (currentSubj !== null) {
-                            subjectsInSheet.push({ name: currentSubj, startCol: startCol, endCol: c - 1 });
-                            currentSubj = null;
-                        }
-                        break;
-                    }
-
-                    if (strVal !== '') {
-                        if (currentSubj !== null) {
-                            subjectsInSheet.push({ name: currentSubj, startCol: startCol, endCol: c - 1 });
-                        }
-                        currentSubj = strVal;
-                        startCol = c;
-                    }
-                }
-
-                if (currentSubj !== null && startCol !== null) {
-                    subjectsInSheet.push({
-                        name: currentSubj,
-                        startCol: startCol,
-                        endCol: nameRow.length - 1
-                    });
-                }
-
-                // Global subject registration
-                subjectsInSheet.forEach(s => {
-                    if (!parsedData.subjectsMap[s.name]) {
-                        parsedData.subjectsMap[s.name] = {
-                            name: s.name,
-                            failedStudents: []
-                        };
-                    }
-                });
-
-                parsedData.classStats[sheetName] = {
-                    totalStudents: 0,
-                    debtorStudents: 0,
-                    totalDebts: 0
-                };
-
-                // 3. Parse Student Rows
-                const dataStartRow = subHeaderIdx + 1;
-
-                for (let r = dataStartRow; r < matrix.length; r++) {
-                    const row = matrix[r];
-                    if (!row) continue;
-
-                    const stt = row[colStt];
-                    const studentId = row[colId] ? String(row[colId]).trim() : '';
-                    
-                    let studentName = row[colName] ? String(row[colName]).trim() : '';
-                    if (colName2 !== -1 && row[colName2]) {
-                        studentName += ' ' + String(row[colName2]).trim();
-                    }
-                    
-                    const dob = (colDob !== -1 && row[colDob]) ? String(row[colDob]).trim() : '';
-
-                    // Valid student check
-                    if (studentId.length >= 3 && (stt !== null && stt !== '' && !isNaN(Number(stt)))) {
-                        parsedData.classStats[sheetName].totalStudents++;
-                        let studentDebts = [];
-
-                        subjectsInSheet.forEach(subj => {
-                            let tkhp = null;
-                            let diemChu = null;
-                            let danhGia = null;
-
-                            for (let col = subj.startCol; col <= subj.endCol; col++) {
-                                const subNameNorm = normalizeText(subRow[col] || matrix[mainHeaderIdx]?.[col]);
-                                const val = row[col];
-
-                                if (subNameNorm.includes('TKHP') || subNameNorm.includes('DIEM TK') || subNameNorm === 'TK' || subNameNorm.includes('TDT')) {
-                                    tkhp = val;
-                                } else if (subNameNorm.includes('CHU') || subNameNorm === 'C') {
-                                    diemChu = val;
-                                } else if (subNameNorm.includes('DANH GIA') || subNameNorm.includes('GHI CHU') || subNameNorm === 'DG' || subNameNorm.includes('KQ')) {
-                                    danhGia = val;
-                                } else if (tkhp === null && val !== null && !isNaN(Number(val))) {
-                                    tkhp = val;
-                                }
-                            }
-
-                            // Evaluate Debt Status
-                            let isDebt = false;
-                            let reason = '';
-
-                            const normDanhGia = normalizeText(danhGia);
-                            const normDiemChu = normalizeText(diemChu);
-
-                            // Helper to detect non-graded/exempt/unstudied cells
-                            const isExemptOrUnstudied = (val) => {
-                                if (val === null || val === undefined || val === '') return true;
-                                const n = normalizeText(val);
-                                return n === '-' || n === 'MIEN' || n === 'HOAN' || n === 'CHUA HOC' || n === 'KHT' || n === 'P';
-                            };
-
-                            // Explicit debt markers
-                            if (normDanhGia.includes('HOC LAI') || normDanhGia.includes('THI LAI') || normDanhGia.includes('KHONG DAT') || normDanhGia.includes('HOCLAI') || normDanhGia.includes('THILAI') || normDanhGia === 'NO' || normDanhGia === 'FAIL') {
-                                isDebt = true;
-                                reason = String(danhGia);
-                            } 
-                            else if (normDiemChu === 'F' || normDiemChu.startsWith('F(') || normDiemChu === 'F*') {
-                                isDebt = true;
-                                reason = 'Điểm F';
-                            } 
-                            else if (tkhp !== null && tkhp !== '' && !isNaN(Number(tkhp)) && !isExemptOrUnstudied(tkhp)) {
-                                const numTkhp = Number(tkhp);
-                                if (numTkhp >= 0 && numTkhp < 4.0 && normDiemChu !== 'M' && normDiemChu !== 'P') {
-                                    isDebt = true;
-                                    reason = `TKHP: ${numTkhp}`;
-                                }
-                            }
-
-                            if (isDebt) {
-                                const debtObj = {
-                                    subjectName: subj.name,
-                                    tkhp: (tkhp !== null && tkhp !== '') ? tkhp : '-',
-                                    diemChu: diemChu || 'F',
-                                    danhGia: danhGia || 'HỌC LẠI',
-                                    reason: reason
-                                };
-                                studentDebts.push(debtObj);
-
-                                parsedData.subjectsMap[subj.name].failedStudents.push({
-                                    studentId: studentId,
-                                    studentName: studentName,
-                                    sheetName: sheetName,
-                                    dob: dob,
-                                    tkhp: debtObj.tkhp,
-                                    diemChu: debtObj.diemChu,
-                                    danhGia: debtObj.danhGia
-                                });
-                            }
-                        });
-
-                        if (studentDebts.length > 0) {
-                            parsedData.classStats[sheetName].debtorStudents++;
-                            parsedData.classStats[sheetName].totalDebts += studentDebts.length;
-                        }
-
-                        parsedData.students.push({
-                            stt: stt,
-                            id: studentId,
-                            name: studentName,
-                            dob: dob,
-                            sheetName: sheetName,
-                            debts: studentDebts
-                        });
-                    }
-                }
-            });
-        }
-
-        function updateKPIs() {
-            const totalStudents = parsedData.students.length;
-            const debtorStudents = parsedData.students.filter(s => s.debts.length > 0).length;
-            const debtorRate = totalStudents > 0 ? ((debtorStudents / totalStudents) * 100).toFixed(1) : 0;
-            const totalSubjects = Object.keys(parsedData.subjectsMap).length;
+    <!-- Student Planner Modal -->
+    <div id="studentPlannerModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden">
+            <!-- Header -->
+            <div class="p-6 bg-brand-700 text-white flex justify-between items-center border-b border-brand-800">
+                <div>
+                    <h3 id="plannerModalTitle" class="text-lg font-extrabold">Lộ Trình Tốt Nghiệp & Kế Hoạch Học Tập</h3>
+                    <p id="plannerModalStudentInfo" class="text-xs text-slate-200 mt-1 font-medium"></p>
+                </div>
+                <button onclick="closePlannerModal()" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
             
-            const debtedSubjects = Object.values(parsedData.subjectsMap).filter(s => s.failedStudents.length > 0).length;
-            
-            let totalFailuresCount = 0;
-            parsedData.students.forEach(s => totalFailuresCount += s.debts.length);
-
-            const avgDebts = debtorStudents > 0 ? (totalFailuresCount / debtorStudents).toFixed(1) : 0;
-
-            document.getElementById('kpiTotalStudents').innerText = totalStudents;
-            document.getElementById('kpiClassesCount').innerText = `${parsedData.sheets.length} Lớp / Sheet`;
-
-            document.getElementById('kpiDebtorStudents').innerText = debtorStudents;
-            document.getElementById('kpiDebtorRate').innerText = `${debtorRate}% tổng số SV`;
-
-            document.getElementById('kpiTotalSubjects').innerText = totalSubjects;
-            document.getElementById('kpiDebtedSubjectsCount').innerText = `${debtedSubjects} môn có SV nợ`;
-
-            document.getElementById('kpiTotalFailCount').innerText = totalFailuresCount;
-            document.getElementById('kpiAvgDebtsPerStudent').innerText = `TB ${avgDebts} môn / SV nợ`;
-        }
-
-        function renderClassList() {
-            const container = document.getElementById('classListContainer');
-            container.innerHTML = '';
-
-            Object.entries(parsedData.classStats).forEach(([className, stats]) => {
-                const rate = stats.totalStudents > 0 ? ((stats.debtorStudents / stats.totalStudents) * 100).toFixed(1) : 0;
-                
-                const card = document.createElement('div');
-                card.className = 'p-3 rounded-xl border border-slate-100 bg-slate-50 flex items-center justify-between';
-                card.innerHTML = `
-                    <div>
-                        <p class="font-semibold text-slate-800 text-xs">${className}</p>
-                        <p class="text-[11px] text-slate-500">${stats.totalStudents} SV • <span class="text-amber-600 font-medium">${stats.debtorStudents} SV nợ môn</span></p>
+            <!-- Progress Bar & KPIs -->
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex-1">
+                    <div class="flex justify-between text-xs font-bold text-slate-700 mb-1.5">
+                        <span>Tiến Độ Tích Lũy Tín Chỉ Khung Đào Tạo</span>
+                        <span id="plannerProgressPercent">0% (0/0 TC)</span>
                     </div>
-                    <div class="text-right">
-                        <span class="inline-block px-2 py-0.5 text-[11px] font-bold rounded-full ${rate > 50 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}">
-                            ${rate}% nợ
-                        </span>
-                        <p class="text-[10px] text-slate-400 mt-0.5">${stats.totalDebts} lượt nợ</p>
+                    <div class="w-full bg-slate-200 rounded-full h-3.5 overflow-hidden shadow-inner">
+                        <div id="plannerProgressBar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-500" style="width: 0%"></div>
                     </div>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        function renderChart() {
-            const ctx = document.getElementById('topSubjectsChart').getContext('2d');
-            
-            const sortedSubjects = Object.values(parsedData.subjectsMap)
-                .filter(s => s.failedStudents.length > 0)
-                .sort((a, b) => b.failedStudents.length - a.failedStudents.length)
-                .slice(0, 10);
-
-            const labels = sortedSubjects.map(s => {
-                const name = s.name.split(' - ')[0];
-                return name.length > 20 ? name.substring(0, 20) + '...' : name;
-            });
-            const dataValues = sortedSubjects.map(s => s.failedStudents.length);
-
-            if (topChartInstance) {
-                topChartInstance.destroy();
-            }
-
-            topChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Số lượng Sinh viên Nợ / Học lại',
-                        data: dataValues,
-                        backgroundColor: 'rgba(239, 68, 68, 0.85)',
-                        borderColor: 'rgb(220, 38, 38)',
-                        borderWidth: 1,
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                title: function(context) {
-                                    return sortedSubjects[context[0].dataIndex].name;
-                                },
-                                label: function(context) {
-                                    return `Số SV nợ: ${context.parsed.y} sinh viên`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: { precision: 0 }
-                        },
-                        x: {
-                            ticks: { font: { size: 10 } }
-                        }
-                    }
-                }
-            });
-        }
-
-        function populateClassFilterOptions() {
-            const select = document.getElementById('studentClassFilter');
-            select.innerHTML = '<option value="ALL">Tất cả Lớp/Sheet</option>';
-            parsedData.sheets.forEach(sh => {
-                const opt = document.createElement('option');
-                opt.value = sh;
-                opt.textContent = sh;
-                select.appendChild(opt);
-            });
-        }
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm');
-                btn.classList.add('text-slate-600', 'hover:bg-slate-100');
-            });
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
-
-            const activeBtn = document.getElementById(`tabBtn-${tabId}`);
-            if (activeBtn) {
-                activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-100');
-                activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow-sm');
-            }
-
-            const activeContent = document.getElementById(`tabContent-${tabId}`);
-            if (activeContent) {
-                activeContent.classList.remove('hidden');
-            }
-        }
-
-        function renderStudentsList() {
-            const searchTerm = document.getElementById('studentSearchInput').value.toLowerCase().trim();
-            const classFilter = document.getElementById('studentClassFilter').value;
-            const debtFilter = document.getElementById('studentDebtFilter').value;
-
-            const filtered = parsedData.students.filter(st => {
-                const matchesSearch = st.name.toLowerCase().includes(searchTerm) || st.id.toLowerCase().includes(searchTerm);
-                const matchesClass = classFilter === 'ALL' || st.sheetName === classFilter;
-                
-                let matchesDebt = true;
-                if (debtFilter === 'DEBT_ONLY') matchesDebt = st.debts.length > 0;
-                else if (debtFilter === 'CLEAN_ONLY') matchesDebt = st.debts.length === 0;
-
-                return matchesSearch && matchesClass && matchesDebt;
-            });
-
-            document.getElementById('studentsListCount').innerText = `Hiển thị ${filtered.length} / ${parsedData.students.length} sinh viên`;
-
-            const tbody = document.getElementById('studentsTableBody');
-            tbody.innerHTML = '';
-
-            if (filtered.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="7" class="py-8 text-center text-slate-400">Không tìm thấy sinh viên phù hợp</td>
-                    </tr>
-                `;
-                return;
-            }
-
-            filtered.forEach((st, idx) => {
-                const tr = document.createElement('tr');
-                tr.className = 'hover:bg-slate-50 transition-colors border-b border-slate-100 cursor-pointer';
-                
-                const debtBadge = st.debts.length > 0 
-                    ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700">${st.debts.length} môn nợ</span>`
-                    : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Đạt 100%</span>`;
-
-                tr.innerHTML = `
-                    <td class="py-3 px-4 text-center font-medium text-slate-400">${idx + 1}</td>
-                    <td class="py-3 px-4 font-medium text-slate-600">${st.sheetName}</td>
-                    <td class="py-3 px-4 font-semibold text-blue-700">${st.id}</td>
-                    <td class="py-3 px-4 font-bold text-slate-800">${st.name}</td>
-                    <td class="py-3 px-4 text-slate-500">${st.dob || '-'}</td>
-                    <td class="py-3 px-4 text-center">${debtBadge}</td>
-                    <td class="py-3 px-4 text-slate-600 max-w-xs truncate">
-                        ${st.debts.map(d => d.subjectName.split(' - ')[0]).join(', ') || '<span class="text-slate-400 font-normal">Không nợ môn nào</span>'}
-                    </td>
-                `;
-
-                // Detailed collapsible row
-                const detailTr = document.createElement('tr');
-                detailTr.className = 'hidden bg-slate-50/80 border-b border-slate-200';
-                
-                let debtItemsHtml = st.debts.map(d => `
-                    <div class="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center justify-between text-xs shadow-xs">
-                        <div>
-                            <p class="font-bold text-slate-800">${d.subjectName}</p>
-                            <p class="text-[11px] text-slate-500 mt-0.5">Trạng thái: <span class="font-semibold text-rose-600">${d.danhGia}</span></p>
-                        </div>
-                        <div class="text-right">
-                            <span class="px-2 py-0.5 font-bold bg-rose-100 text-rose-800 rounded">${d.diemChu} (TKHP: ${d.tkhp})</span>
-                        </div>
+                </div>
+                <div class="flex gap-2.5 text-center text-[10px] sm:text-xs font-semibold text-slate-600">
+                    <div class="bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl flex-1 sm:flex-initial">
+                        <div class="text-emerald-700 font-extrabold text-base" id="plannerPassedCount">0</div>
+                        <div>Đã đạt</div>
                     </div>
-                `).join('');
-
-                if (st.debts.length === 0) {
-                    debtItemsHtml = `<p class="text-xs text-emerald-600 font-medium">✨ Sinh viên đã hoàn thành đạt tất cả các môn học!</p>`;
-                }
-
-                detailTr.innerHTML = `
-                    <td colspan="7" class="p-4">
-                        <div class="space-y-2 max-w-4xl mx-auto">
-                            <p class="text-xs font-bold text-slate-700 uppercase tracking-wider">Chi Tiết Các Môn Nợ Của ${st.name} (${st.id}):</p>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                ${debtItemsHtml}
-                            </div>
-                        </div>
-                    </td>
-                `;
-
-                tr.addEventListener('click', () => {
-                    detailTr.classList.toggle('hidden');
-                });
-
-                tbody.appendChild(tr);
-                tbody.appendChild(detailTr);
-            });
-        }
-
-        function renderSubjectsList() {
-            const searchTerm = document.getElementById('subjectSearchInput').value.toLowerCase().trim();
-            const sortFilter = document.getElementById('subjectSortFilter').value;
-
-            let subjectsArray = Object.values(parsedData.subjectsMap).filter(subj => {
-                return subj.name.toLowerCase().includes(searchTerm);
-            });
-
-            if (sortFilter === 'MOST_DEBT') {
-                subjectsArray.sort((a, b) => b.failedStudents.length - a.failedStudents.length);
-            } else if (sortFilter === 'NAME_ASC') {
-                subjectsArray.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
-            }
-
-            const container = document.getElementById('subjectsListContainer');
-            container.innerHTML = '';
-
-            if (subjectsArray.length === 0) {
-                container.innerHTML = `
-                    <div class="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-400">
-                        Không tìm thấy môn học phù hợp
+                    <div class="bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl flex-1 sm:flex-initial">
+                        <div class="text-rose-700 font-extrabold text-base" id="plannerFailedCount">0</div>
+                        <div>Đang nợ</div>
                     </div>
-                `;
-                return;
-            }
-
-            subjectsArray.forEach((subj, idx) => {
-                const failCount = subj.failedStudents.length;
-                const card = document.createElement('div');
-                card.className = 'bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden transition-all';
-
-                const header = document.createElement('div');
-                header.className = 'p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 border-b border-transparent';
-                header.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${failCount > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
-                            ${failCount}
-                        </div>
-                        <div>
-                            <h4 class="font-bold text-slate-800 text-sm">${subj.name}</h4>
-                            <p class="text-xs text-slate-400">${failCount > 0 ? `${failCount} sinh viên chưa đạt` : 'Không có sinh viên nợ môn này'}</p>
-                        </div>
+                    <div class="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl flex-1 sm:flex-initial">
+                        <div class="text-slate-600 font-extrabold text-base" id="plannerUnstudiedCount">0</div>
+                        <div>Chưa học</div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs font-semibold px-2.5 py-1 rounded-lg ${failCount > 0 ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-500'}">
-                            ${failCount > 0 ? 'Cần Học Lại' : 'Hoàn Thành'}
-                        </span>
-                        <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform duration-200"></i>
+                </div>
+            </div>
+
+            <!-- Tab Buttons -->
+            <div class="bg-white px-6 py-2 border-b border-slate-200 flex gap-2">
+                <button onclick="switchPlannerTab('roadmap')" id="plannerTabBtn-roadmap" class="planner-tab-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-brand-50 text-brand-700 transition-colors">
+                    <i class="fa-solid fa-map-location-dot mr-1.5"></i>Đối Sánh Môn Học
+                </button>
+                <button onclick="switchPlannerTab('planner')" id="plannerTabBtn-planner" class="planner-tab-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                    <i class="fa-solid fa-calendar-days mr-1.5"></i>Kế Hoạch Kỳ Học Tương Lai
+                </button>
+            </div>
+
+            <!-- Modal Content (Scrollable) -->
+            <div class="p-6 custom-scrollbar overflow-y-auto flex-1 bg-slate-50/50">
+                <!-- Tab 1: Roadmap -->
+                <div id="plannerTabContent-roadmap" class="planner-tab-content space-y-6">
+                    <!-- Knowledge blocks and courses list -->
+                </div>
+
+                <!-- Tab 2: Interactive Planning -->
+                <div id="plannerTabContent-planner" class="planner-tab-content hidden space-y-6">
+                    <!-- Semester planning interface -->
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+                <p class="text-[11px] text-slate-500 italic"><i class="fa-solid fa-circle-info mr-1 text-slate-400"></i>Kế hoạch học tập sẽ được tự động đồng bộ & lưu trữ cho sinh viên.</p>
+                <div class="flex gap-2">
+                    <button onclick="closePlannerModal()" class="px-5 py-2.5 rounded-xl bg-white border border-slate-300 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors">Đóng</button>
+                    <button onclick="window.printPlanner()" class="px-6 py-2.5 rounded-xl bg-phenikaa-orange hover:bg-orange-600 text-white text-sm font-bold shadow-md transition-colors"><i class="fa-solid fa-print mr-1.5"></i>In Kế Hoạch</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Send Notification Modal -->
+    <div id="sendNotificationModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-100">
+            <!-- Modal Header -->
+            <div class="p-5 border-b border-slate-200 flex justify-between items-center">
+                <div>
+                    <h3 id="sendModalTitle" class="text-lg font-extrabold text-slate-800">Gửi Thông Báo</h3>
+                    <div id="sendModalStudentInfo" class="text-sm text-slate-500 mt-1 flex items-center gap-2 font-medium"></div>
+                </div>
+                <button onclick="closeSendModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-6 custom-scrollbar overflow-y-auto space-y-5 flex-1">
+                <div>
+                    <label class="text-sm font-semibold text-slate-700 mb-2 block">Hình thức thông báo</label>
+                    <div class="flex gap-3">
+                        <label class="flex-1 p-3 border-2 border-brand-700 bg-blue-50/20 rounded-xl cursor-pointer flex items-center gap-3">
+                            <input type="radio" name="sendType" value="email" class="w-4 h-4 text-brand-700 focus:ring-brand-700" checked>
+                            <span class="font-bold text-xs sm:text-sm"><i class="fa-solid fa-envelope mr-1.5 text-brand-700"></i>Gửi qua Email</span>
+                        </label>
+                        <label class="flex-1 p-3 border border-slate-300 rounded-xl cursor-pointer flex items-center gap-3">
+                            <input type="radio" name="sendType" value="message" class="w-4 h-4 text-brand-700 focus:ring-brand-700">
+                            <span class="font-bold text-xs sm:text-sm"><i class="fa-solid fa-comment-sms mr-1.5 text-slate-500"></i>Zalo / SMS</span>
+                        </label>
                     </div>
-                `;
+                </div>
+                <div>
+                    <label for="sendModalRecipient" class="text-sm font-semibold text-slate-700 mb-1.5 block">Người nhận</label>
+                    <input type="text" id="sendModalRecipient" class="w-full px-4 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-brand-700 bg-slate-50 font-medium" readonly>
+                </div>
+                <div>
+                    <label for="sendModalSubject" class="text-sm font-semibold text-slate-700 mb-1.5 block">Tiêu đề</label>
+                    <input type="text" id="sendModalSubject" placeholder="Tiêu đề thông báo" class="w-full px-4 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-brand-700">
+                </div>
+                <div>
+                    <label for="sendModalBody" class="text-sm font-semibold text-slate-700 mb-1.5 block">Nội dung thông báo</label>
+                    <textarea id="sendModalBody" rows="8" class="w-full px-4 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-brand-700 font-mono"></textarea>
+                    <p class="text-xs text-slate-500 mt-1.5">Biến động động: <code class="bg-slate-100 px-1 rounded font-bold">{ho_ten}</code>, <code class="bg-slate-100 px-1 rounded font-bold">{mssv}</code>, <code class="bg-slate-100 px-1 rounded font-bold">{so_mon_no}</code>, <code class="bg-slate-100 px-1 rounded font-bold">{danh_sach_mon_no}</code></p>
+                </div>
+            </div>
 
-                const body = document.createElement('div');
-                body.className = 'hidden p-4 bg-slate-50 border-t border-slate-200';
+            <!-- Modal Footer -->
+            <div class="p-5 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
+                <button onclick="closeSendModal()" class="px-5 py-2.5 rounded-xl bg-white border border-slate-300 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors">Hủy</button>
+                <button onclick="logNotification()" class="px-6 py-2.5 rounded-xl bg-phenikaa-orange hover:bg-orange-600 text-white text-sm font-bold transition-colors">Gửi & Lưu Nhật Ký</button>
+            </div>
+        </div>
+    </div>
 
-                if (failCount === 0) {
-                    body.innerHTML = `<p class="text-xs text-slate-500 italic">Không có sinh viên nào phải học lại môn học này.</p>`;
-                } else {
-                    let tableRows = subj.failedStudents.map((sv, sIdx) => `
-                        <tr class="border-b border-slate-200/60 hover:bg-white text-xs">
-                            <td class="py-2 px-3 text-center text-slate-400">${sIdx + 1}</td>
-                            <td class="py-2 px-3 font-semibold text-blue-700">${sv.studentId}</td>
-                            <td class="py-2 px-3 font-bold text-slate-800">${sv.studentName}</td>
-                            <td class="py-2 px-3 text-slate-600">${sv.sheetName}</td>
-                            <td class="py-2 px-3 text-center font-semibold text-rose-600">${sv.diemChu} (TKHP: ${sv.tkhp})</td>
-                            <td class="py-2 px-3 text-center"><span class="px-2 py-0.5 bg-rose-100 text-rose-700 rounded text-[11px] font-bold">${sv.danhGia}</span></td>
-                        </tr>
-                    `).join('');
+    <!-- Modal Detail Window -->
+    <div id="subjectDetailModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-slate-100">
+            <div class="p-6 bg-brand-900 text-white flex justify-between items-start">
+                <div>
+                    <h3 id="modalSubjectName" class="text-lg font-bold">Tên Môn Học</h3>
+                    <p id="modalSubjectSubtitle" class="text-xs text-slate-300 mt-1">Danh sách sinh viên đang nợ môn học này</p>
+                </div>
+                <button onclick="closeSubjectModal()" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
 
-                    body.innerHTML = `
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left bg-white rounded-xl border border-slate-200 overflow-hidden">
-                                <thead>
-                                    <tr class="bg-slate-100 text-slate-600 text-xs font-semibold">
-                                        <th class="py-2.5 px-3 text-center w-10">STT</th>
-                                        <th class="py-2.5 px-3">MSSV</th>
-                                        <th class="py-2.5 px-3">Họ Tên</th>
-                                        <th class="py-2.5 px-3">Lớp / Sheet</th>
-                                        <th class="py-2.5 px-3 text-center">Điểm số</th>
-                                        <th class="py-2.5 px-3 text-center">Đánh giá</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${tableRows}
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-                }
+            <div id="modalStudentList" class="p-6 custom-scrollbar overflow-y-auto space-y-3 flex-1">
+                <!-- Modal Student List -->
+            </div>
+        </div>
+    </div>
 
-                header.addEventListener('click', () => {
-                    body.classList.toggle('hidden');
-                    const icon = header.querySelector('[data-lucide="chevron-down"]');
-                    if (icon) icon.classList.toggle('rotate-180');
-                });
+    <!-- Printable study plan area (for PDF/printing) -->
+    <div id="printablePlanArea" class="hidden"></div>
 
-                card.appendChild(header);
-                card.appendChild(body);
-                container.appendChild(card);
-            });
-
-            lucide.createIcons();
-        }
-
-        function exportToExcel() {
-            if (!parsedData.students || parsedData.students.length === 0) {
-                showNotice('Chưa có dữ liệu để xuất!', 'error');
-                return;
-            }
-
-            const exportRows = [];
-            parsedData.students.forEach(st => {
-                if (st.debts.length > 0) {
-                    st.debts.forEach(d => {
-                        exportRows.push({
-                            'Lớp / Sheet': st.sheetName,
-                            'Mã Sinh Viên': st.id,
-                            'Họ và Tên': st.name,
-                            'Ngày Sinh': st.dob,
-                            'Tên Môn Nợ': d.subjectName,
-                            'Điểm Tổng Kết (TKHP)': d.tkhp,
-                            'Điểm Chữ': d.diemChu,
-                            'Đánh Giá': d.danhGia
-                        });
-                    });
-                }
-            });
-
-            if (exportRows.length === 0) {
-                showNotice('Không có sinh viên nợ môn nào để xuất!', 'info');
-                return;
-            }
-
-            const ws = XLSX.utils.json_to_sheet(exportRows);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Danh_Sach_No_Mon");
-
-            XLSX.writeFile(wb, `Bao_Cao_No_Mon_Sinh_Vien.xlsx`);
-        }
-
-        function showNotice(msg, type = 'info') {
-            const toast = document.createElement('div');
-            toast.className = `fixed bottom-5 right-5 px-4 py-3 rounded-xl shadow-lg text-white text-xs font-semibold z-50 flex items-center gap-2 transition-all duration-300 transform translate-y-full ${type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}`;
-            toast.innerHTML = `<i data-lucide="${type === 'error' ? 'alert-circle' : 'check-circle'}" class="w-4 h-4"></i> ${msg}`;
-            document.body.appendChild(toast);
-            lucide.createIcons();
-
-            setTimeout(() => toast.classList.remove('translate-y-full'), 10);
-            setTimeout(() => {
-                toast.classList.add('translate-y-full');
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }
-    </script>
+    <!-- Application Logic (Separated Module) -->
+    <script type="module" src="js/thongkenomon.js"></script>
 </body>
 </html>

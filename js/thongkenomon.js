@@ -13,19 +13,26 @@ let globalData = {
     sheets: [],
     students: [],
     subjectsMap: {},
-    classList: []
+    classList: [],
+    frameworkCourses: [], // Store list of required courses from Framework file
+    frameworkMetadata: { totalCredits: 0 }
 };
+
+// State for files loaded in memory
+let loadedStudentWorkbook = null;
+let loadedFrameworkWorkbook = null;
 
 let currentTab = 'overview';
 let chartInstance = null;
+let currentSelectedStudentForPlanner = null;
+let currentPlannerTab = 'roadmap';
 
-// Initialize Drag-and-Drop support on page load
+// Initialize events on page load
 window.addEventListener('DOMContentLoaded', () => {
     setupDragAndDrop();
 
     // --- GẮN CÁC HÀM VÀO WINDOW ĐỂ HTML CÓ THỂ GỌI ---
-    // Do script được load dưới dạng module, các hàm không tự động có sẵn trên global scope.
-    window.handleFileUpload = handleFileUpload;
+    window.startAnalysis = startAnalysis;
     window.loadDemoData = loadDemoData;
     window.exportToExcel = exportToExcel;
     window.switchTab = switchTab;
@@ -38,12 +45,23 @@ window.addEventListener('DOMContentLoaded', () => {
     window.closeSendModal = closeSendModal;
     window.logNotification = logNotification;
     window.renderLogsTab = renderLogsTab;
-
-    // Gắn sự kiện cho các input file
-    document.getElementById('excelFileInput').addEventListener('change', handleFileUpload);
-    document.getElementById('excelFileInputHeader').addEventListener('change', handleFileUpload);
-
+    window.parseFrameworkWorkbook = parseFrameworkWorkbook;
     
+    // Planner functions
+    window.openPlannerModal = openPlannerModal;
+    window.closePlannerModal = closePlannerModal;
+    window.switchPlannerTab = switchPlannerTab;
+    window.updatePlannerSemester = updatePlannerSemester;
+    window.printPlanner = printPlanner;
+    window.resetApp = resetApp;
+
+    // Attach listeners for file select
+    const studentInput = document.getElementById('studentFileInput');
+    const frameworkInput = document.getElementById('frameworkFileInput');
+    
+    studentInput.addEventListener('change', (e) => handleFileSelect(e, 'student'));
+    frameworkInput.addEventListener('change', (e) => handleFileSelect(e, 'framework'));
+
     // Listen for Firebase auth state
     onAuthStateChanged(auth, (user) => {
         if (user) {
@@ -51,42 +69,147 @@ window.addEventListener('DOMContentLoaded', () => {
             showCustomMessage(`Đã xác thực người dùng: ${user.email}`, 'success');
         } else {
             firebaseUser = null;
-            showCustomMessage("Chưa đăng nhập! Vui lòng đăng nhập ở trang chính để sử dụng tính năng lưu log.", "error");
+            showCustomMessage("Chưa đăng nhập! Đăng nhập ở trang chính để lưu nhật ký thông báo.", "info");
         }
     });
 
-    // Render the initial view
+    // Render the initial upload screen view
     renderDashboard();
 });
 
+// Setup click and drag-drop handlers for the two slots
 function setupDragAndDrop() {
-    const dropArea = document.getElementById('uploadSection');
-    if (!dropArea) return;
+    const studentZone = document.getElementById('studentDropZone');
+    const frameworkZone = document.getElementById('frameworkDropZone');
 
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, preventDefaults, false);
+    if (!studentZone || !frameworkZone) return;
+
+    // Bind click to trigger hidden inputs
+    studentZone.addEventListener('click', () => document.getElementById('studentFileInput').click());
+    frameworkZone.addEventListener('click', () => document.getElementById('frameworkFileInput').click());
+
+    // Setup drag-and-drop styles
+    [studentZone, frameworkZone].forEach((zone, idx) => {
+        const type = idx === 0 ? 'student' : 'framework';
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            zone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                zone.classList.add('drop-active');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            zone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                zone.classList.remove('drop-active');
+            }, false);
+        });
+
+        zone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files && files.length > 0) {
+                loadExcelFile(files[0], type);
+            }
+        });
     });
+}
 
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
+function handleFileSelect(event, type) {
+    const file = event.target.files[0];
+    if (file) {
+        loadExcelFile(file, type);
+    }
+}
+
+// Read Excel file into memory and update UI
+function loadExcelFile(file, type) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            if (type === 'student') {
+                loadedStudentWorkbook = workbook;
+                document.getElementById('studentFileStatus').innerText = `Đã chọn: ${file.name}`;
+                document.getElementById('studentFileStatus').className = "mt-4 px-3.5 py-1 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold";
+                document.getElementById('btnAnalyze').disabled = false;
+                showCustomMessage("Đã nạp bảng điểm sinh viên thành công!", "success");
+            } else {
+                loadedFrameworkWorkbook = workbook;
+                document.getElementById('frameworkFileStatus').innerText = `Đã chọn: ${file.name}`;
+                document.getElementById('frameworkFileStatus').className = "mt-4 px-3.5 py-1 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold";
+                showCustomMessage("Đã nạp khung chương trình đào tạo thành công!", "success");
+            }
+        } catch (err) {
+            console.error("Error reading file:", err);
+            showCustomMessage(`Lỗi đọc file Excel ${type}: ` + err.message, "error");
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// Execute analysis when "Bắt Đầu Phân Tích" is clicked
+function startAnalysis() {
+    if (!loadedStudentWorkbook) {
+        showCustomMessage("Vui lòng tải lên bảng điểm sinh viên trước!", "error");
+        return;
     }
 
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropArea.addEventListener(eventName, () => dropArea.classList.add('drop-active'), false);
-    });
+    document.getElementById('loadingSpinner').classList.remove('hidden');
 
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, () => dropArea.classList.remove('drop-active'), false);
-    });
+    setTimeout(() => {
+        try {
+            // 1. Parse curricular framework if loaded
+            if (loadedFrameworkWorkbook) {
+                parseFrameworkWorkbook(loadedFrameworkWorkbook);
+                document.getElementById('frameworkLoadedBadge').classList.remove('hidden');
+            } else {
+                globalData.frameworkCourses = [];
+                globalData.frameworkMetadata = { totalCredits: 0 };
+                document.getElementById('frameworkLoadedBadge').classList.add('hidden');
+            }
 
-    dropArea.addEventListener('drop', (e) => {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        if (files && files.length > 0) {
-            processFile(files[0]);
+            // 2. Parse student grades
+            parseWorkbook(loadedStudentWorkbook);
+
+            // 3. Update dashboard UI
+            renderDashboard();
+            showCustomMessage("Phân tích bóc tách và đối sánh nợ môn thành công!", "success");
+        } catch (err) {
+            console.error("Analysis Error:", err);
+            showCustomMessage("Có lỗi xảy ra khi phân tích dữ liệu: " + err.message, "error");
+        } finally {
+            document.getElementById('loadingSpinner').classList.add('hidden');
         }
-    });
+    }, 50);
+}
+
+function resetApp() {
+    loadedStudentWorkbook = null;
+    loadedFrameworkWorkbook = null;
+    globalData = {
+        sheets: [],
+        students: [],
+        subjectsMap: {},
+        classList: [],
+        frameworkCourses: [],
+        frameworkMetadata: { totalCredits: 0 }
+    };
+    
+    document.getElementById('studentFileStatus').innerText = "Chưa tải lên";
+    document.getElementById('studentFileStatus').className = "mt-4 px-3.5 py-1 bg-slate-200/60 text-slate-600 rounded-xl text-xs font-bold";
+    document.getElementById('frameworkFileStatus').innerText = "Chưa tải lên (Tùy chọn)";
+    document.getElementById('frameworkFileStatus').className = "mt-4 px-3.5 py-1 bg-slate-200/60 text-slate-600 rounded-xl text-xs font-bold";
+    document.getElementById('btnAnalyze').disabled = true;
+    document.getElementById('studentFileInput').value = '';
+    document.getElementById('frameworkFileInput').value = '';
+
+    renderDashboard();
 }
 
 function showCustomMessage(msg, type = 'info') {
@@ -117,7 +240,6 @@ function normalizeText(str) {
         .trim();
 }
 
-// Extract the latest attempt from values separated by pipe "|"
 function getLatestAttempt(value) {
     if (value === null || value === undefined) return '';
     const str = String(value).trim();
@@ -128,53 +250,106 @@ function getLatestAttempt(value) {
     return str;
 }
 
-function handleFileUpload(event) {
-    const file = event.target.files[0];
-    if (file) processFile(file);
-}
+// Parse Curricular Framework sheet
+function parseFrameworkWorkbook(workbook) {
+    globalData.frameworkCourses = [];
+    globalData.frameworkMetadata = { totalCredits: 0 };
 
-function processFile(file) {
-    document.getElementById('loadingSpinner').classList.remove('hidden');
+    // Select the first sheet (usually the framework list)
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return;
 
-    setTimeout(() => {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                
-                parseWorkbook(workbook);
-                
-                // Data is loaded, re-render the dashboard
-                renderDashboard();
-            } catch (err) {
-                console.error("Error parsing Excel:", err);
-                showCustomMessage("Có lỗi xảy ra khi đọc tệp Excel. Vui lòng kiểm tra lại định dạng tệp!", "error");
-            } finally {
-                document.getElementById('loadingSpinner').classList.add('hidden');
+    let rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (!rawData || rawData.length < 2) return;
+
+    // Propagate merged cells to avoid holes in knowledge block columns
+    if (sheet['!merges']) {
+        sheet['!merges'].forEach(range => {
+            const startVal = rawData[range.s.r] ? rawData[range.s.r][range.s.c] : '';
+            if (startVal !== undefined && startVal !== null && String(startVal).trim() !== '') {
+                for (let r = range.s.r; r <= range.e.r; r++) {
+                    if (!rawData[r]) rawData[r] = [];
+                    for (let c = range.s.c; c <= range.e.c; c++) {
+                        if (!rawData[r][c] || String(rawData[r][c]).trim() === '') {
+                            rawData[r][c] = startVal;
+                        }
+                    }
+                }
             }
-        };
-        reader.readAsArrayBuffer(file);
-    }, 50);
+        });
+    }
+
+    // Dynamic resolution of columns in the framework sheet
+    let colBlockId = 1;
+    let colBlockName = 2;
+    let colCourseCode = 4;
+    let colCourseName = 5;
+    let colCredits = 6;
+
+    // Search header row
+    let headerRowIdx = 0;
+    for (let r = 0; r < Math.min(10, rawData.length); r++) {
+        const row = rawData[r] || [];
+        const str = row.map(c => normalizeText(c)).join(' ');
+        if (str.includes('MA HOC PHAN') || str.includes('TEN HOC PHAN') || str.includes('TIN CHI')) {
+            headerRowIdx = r;
+            row.forEach((cell, idx) => {
+                const norm = normalizeText(cell);
+                if (norm.includes('MA KHOI')) colBlockId = idx;
+                else if (norm.includes('TEN KHOI')) colBlockName = idx;
+                else if (norm.includes('MA HOC PHAN') || norm.includes('MA HP')) colCourseCode = idx;
+                else if (norm.includes('TEN HOC PHAN') || norm.includes('TEN HP')) colCourseName = idx;
+                else if (norm.includes('TIN CHI') || norm.includes('SO TC') || norm === 'TC') colCredits = idx;
+            });
+            break;
+        }
+    }
+
+    let totalCredits = 0;
+    for (let r = headerRowIdx + 1; r < rawData.length; r++) {
+        const row = rawData[r];
+        if (!row || row.length === 0) continue;
+
+        const courseCode = String(row[colCourseCode] || '').trim();
+        const courseName = String(row[colCourseName] || '').trim();
+        const creditsVal = String(row[colCredits] || '').trim();
+
+        const blockId = String(row[colBlockId] || 'Khác').trim();
+        const blockName = String(row[colBlockName] || 'Khối kiến thức khác').trim();
+
+        if (courseCode && courseCode.length >= 3 && courseName && !courseName.includes('CỘNG') && !courseName.includes('Tổng cộng')) {
+            const credits = parseInt(creditsVal, 10) || 0;
+            globalData.frameworkCourses.push({
+                blockId,
+                blockName,
+                courseCode,
+                courseName,
+                credits
+            });
+            totalCredits += credits;
+        }
+    }
+
+    globalData.frameworkMetadata.totalCredits = totalCredits;
+    console.log(`Framework loaded: ${globalData.frameworkCourses.length} courses, ${totalCredits} credits.`);
 }
 
+// Parse Student Grades workbook
 function parseWorkbook(workbook) {
-    globalData = {
-        sheets: workbook.SheetNames,
-        students: [],
-        subjectsMap: {},
-        classList: workbook.SheetNames
-    };
+    globalData.sheets = workbook.SheetNames;
+    globalData.students = [];
+    globalData.subjectsMap = {};
+    globalData.classList = workbook.SheetNames;
 
     workbook.SheetNames.forEach(sheetName => {
         const sheet = workbook.Sheets[sheetName];
         if (!sheet) return;
 
         const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-
         if (!rawData || rawData.length < 5) return;
 
-        // 1. Propagate merged cells so every cell in the span receives its header text
+        // 1. Propagate merged cells
         if (sheet['!merges']) {
             sheet['!merges'].forEach(range => {
                 const startVal = rawData[range.s.r] ? rawData[range.s.r][range.s.c] : '';
@@ -330,7 +505,7 @@ function parseWorkbook(workbook) {
             }
         });
 
-        // 5. Evaluate Student Rows accurately (Checking LATEST attempt after "|")
+        // 5. Evaluate Student Rows (Mapping ALL course grades for framework matching)
         for (let r = subHeaderRowIdx + 1; r < rawData.length; r++) {
             const row = rawData[r];
             if (!row || row.length === 0) continue;
@@ -350,7 +525,6 @@ function parseWorkbook(workbook) {
             const dob = dobColIdx !== -1 ? String(row[dobColIdx] || '').trim() : '';
             let email = emailColIdx !== -1 ? String(row[emailColIdx] || '').trim() : '';
 
-            // Auto-generate email if empty but ID is valid
             if (!email && id.length >= 6 && !isNaN(Number(id))) {
                 email = `${id}@phenikaa-uni.edu.vn`;
             }
@@ -361,13 +535,24 @@ function parseWorkbook(workbook) {
 
             if (isSttNumber && isIdValid) {
                 let studentDebts = [];
+                let coursesTaken = {}; // Store grades of ALL studied subjects
 
                 subjectsInSheet.forEach(subj => {
+                    // Extract code from subject name: e.g. "Giải tích 2 - FFS703064" -> "FFS703064"
+                    const parts = subj.name.split(' - ');
+                    const courseCode = parts.length > 1 ? parts[parts.length - 1].trim() : subj.name;
+
                     const rawTkhp = subj.colTKHP !== -1 ? row[subj.colTKHP] : null;
                     const rawDiemChu = subj.colDiemChu !== -1 ? row[subj.colDiemChu] : null;
                     const rawDanhGia = subj.colDanhGia !== -1 ? row[subj.colDanhGia] : null;
 
-                    // EXTRACT LATEST ATTEMPT (AFTER "|")
+                    // Skip empty columns completely (not taken)
+                    if ((rawTkhp === null || rawTkhp === '') && 
+                        (rawDiemChu === null || rawDiemChu === '') && 
+                        (rawDanhGia === null || rawDanhGia === '')) {
+                        return;
+                    }
+
                     const latestTkhpStr = getLatestAttempt(rawTkhp);
                     const latestDiemChuStr = getLatestAttempt(rawDiemChu);
                     const latestDanhGiaStr = getLatestAttempt(rawDanhGia);
@@ -378,7 +563,6 @@ function parseWorkbook(workbook) {
                     let isDebt = false;
                     let reason = '';
 
-                    // Check if latest attempt is explicitly passed
                     const isExplicitPass = normDiemChu === 'P' || normDiemChu === 'M' || normDiemChu === 'DAT' || 
                                            normDiemChu === 'PASS' || normDanhGia === 'DAT' || normDanhGia === 'PASS' || 
                                            normDanhGia === 'MIEN' || normDanhGia === 'HOAN' ||
@@ -396,16 +580,24 @@ function parseWorkbook(workbook) {
                         } 
                         else if (normDiemChu === 'F' || normDiemChu.startsWith('F(') || normDiemChu === 'F*' || normDiemChu === 'F+' || normDiemChu === 'KD' || normDiemChu === 'VT' || normDiemChu === 'CT') {
                             isDebt = true;
-                            reason = `Điểm chữ: ${rawDiemChu}`;
+                            reason = `Điểm F`;
                         } 
                         else if (latestTkhpStr !== '' && !isNaN(Number(latestTkhpStr))) {
                             const numTkhp = Number(latestTkhpStr);
                             if (numTkhp >= 0 && numTkhp < 4.0) {
                                 isDebt = true;
-                                reason = `TKHP: ${rawTkhp} (< 4.0)`;
+                                reason = `TKHP: ${latestTkhpStr} (< 4.0)`;
                             }
                         }
                     }
+
+                    // Save studied status in map
+                    coursesTaken[courseCode] = {
+                        passed: !isDebt,
+                        tkhp: latestTkhpStr,
+                        diemChu: latestDiemChuStr,
+                        danhGia: latestDanhGiaStr
+                    };
 
                     if (isDebt) {
                         studentDebts.push({
@@ -435,7 +627,9 @@ function parseWorkbook(workbook) {
                     dob: dob,
                     email: email,
                     className: sheetName,
-                    debts: studentDebts
+                    debts: studentDebts,
+                    coursesTaken: coursesTaken,
+                    studyPlan: {} // Future semesters study plan { [courseCode]: semesterName }
                 });
             }
         }
@@ -446,100 +640,190 @@ function parseWorkbook(workbook) {
 }
 
 function loadDemoData() {
-    globalData = {
-        sheets: ['K17-KTPM(EL)_1', 'K17-KTPM(EL)_2'],
-        classList: ['K17-KTPM(EL)_1', 'K17-KTPM(EL)_2'],
-        students: [],
-        subjectsMap: {}
-    };
+    // 1. Mock curricular framework
+    globalData.frameworkCourses = [
+        { blockId: 'A1', blockName: 'Khối kiến thức giáo dục đại cương', courseCode: 'FFS703002', courseName: 'Triết học Mác - Lê nin', credits: 3 },
+        { blockId: 'A1', blockName: 'Khối kiến thức giáo dục đại cương', courseCode: 'FFS702003', courseName: 'Kinh tế chính trị Mác - Lênin', credits: 2 },
+        { blockId: 'A1', blockName: 'Khối kiến thức giáo dục đại cương', courseCode: 'FFS702001', courseName: 'Pháp luật đại cương', credits: 2 },
+        { blockId: 'A1', blockName: 'Khối kiến thức giáo dục đại cương', courseCode: 'FFS703007', courseName: 'Đại số tuyến tính', credits: 3 },
+        { blockId: 'A1', blockName: 'Khối kiến thức giáo dục đại cương', courseCode: 'FFS703008', courseName: 'Giải tích', credits: 3 },
+        { blockId: 'A2', blockName: 'Khối kiến thức cơ sở toán - lý', courseCode: 'FFS703013', courseName: 'Vật lý 1', credits: 3 },
+        { blockId: 'A2', blockName: 'Khối kiến thức cơ sở toán - lý', courseCode: 'CSE703024', courseName: 'Toán rời rạc', credits: 3 },
+        { blockId: 'A2', blockName: 'Khối kiến thức cơ sở toán - lý', courseCode: 'CSE703057', courseName: 'Tối ưu hóa', credits: 3 },
+        { blockId: 'B1', blockName: 'Khối kiến thức cơ sở ngành', courseCode: 'CSE703107', courseName: 'Cơ sở lập trình', credits: 3 },
+        { blockId: 'B1', blockName: 'Khối kiến thức cơ sở ngành', courseCode: 'CSE703029', courseName: 'Lập trình hướng đối tượng', credits: 3 },
+        { blockId: 'B1', blockName: 'Khối kiến thức cơ sở ngành', courseCode: 'CSE703006', courseName: 'Cấu trúc dữ liệu và thuật toán', credits: 3 },
+        { blockId: 'B1', blockName: 'Khối kiến thức cơ sở ngành', courseCode: 'CSE703008', courseName: 'Cơ sở dữ liệu', credits: 3 },
+        { blockId: 'B2', blockName: 'Khối kiến thức chuyên ngành', courseCode: 'CSE703064', courseName: 'Xây dựng ứng dụng web', credits: 3 },
+        { blockId: 'B2', blockName: 'Khối kiến thức chuyên ngành', courseCode: 'CSE703048', courseName: 'Phân tích và thiết kế phần mềm', credits: 3 },
+        { blockId: 'B2', blockName: 'Khối kiến thức chuyên ngành', courseCode: 'CSE703110', courseName: 'Kiến trúc phần mềm', credits: 3 }
+    ];
+    globalData.frameworkMetadata = { totalCredits: 40 };
 
-    const sampleSubjects = [
-        'Giải tích 2 - FFS703064',
+    // 2. Mock student data
+    globalData.sheets = ['K17-KTPM(EL)_1', 'K17-KTPM(EL)_2'];
+    globalData.classList = ['K17-KTPM(EL)_1', 'K17-KTPM(EL)_2'];
+    globalData.students = [];
+    globalData.subjectsMap = {};
+
+    const mockSubjects = [
+        'Giải tích - FFS703008',
         'Đại số tuyến tính - FFS703007',
         'Vật lý 1 - FFS703013',
         'Toán rời rạc - CSE703024',
         'Cơ sở lập trình - CSE703107',
-        'Cấu trúc dữ liệu và thuật toán - CSE703006'
+        'Cấu trúc dữ liệu và thuật toán - CSE703006',
+        'Lập trình hướng đối tượng - CSE703029'
     ];
 
-    sampleSubjects.forEach(s => {
+    mockSubjects.forEach(s => {
         globalData.subjectsMap[s] = { name: s, totalDebts: 0, debtStudents: [] };
     });
 
-    const mockStudents = [
-        { id: '23010342', name: 'Nguyễn Duy Anh', cls: 'K17-KTPM(EL)_1', debts: [{ subj: 'Giải tích 2 - FFS703064', reason: 'HOCLAI', tkhp: 0.0, diemChu: 'F' }] },
-        { id: '23010357', name: 'Nguyễn Quang Anh', cls: 'K17-KTPM(EL)_1', debts: [{ subj: 'Giải tích 2 - FFS703064', reason: 'TKHP: 3.9 (< 4.0)', tkhp: 3.9, diemChu: 'F' }] },
-        { id: '23010442', name: 'Vũ Đức Anh', cls: 'K17-KTPM(EL)_1', debts: [{ subj: 'Đại số tuyến tính - FFS703007', reason: 'HOCLAI', tkhp: 0.0, diemChu: 'F' }, { subj: 'Cơ sở lập trình - CSE703107', reason: 'TKHP: 3.4 (< 4.0)', tkhp: 3.4, diemChu: 'F' }] },
-        { id: '23010180', name: 'Nguyễn Viết Bin', cls: 'K17-KTPM(EL)_1', debts: [{ subj: 'Vật lý 1 - FFS703013', reason: 'HOCLAI', tkhp: 0.0, diemChu: 'F' }] },
-        { id: '23010283', name: 'Trần Ngọc An', cls: 'K17-KTPM(EL)_1', debts: [] }
+    const mockStudentsRaw = [
+        { 
+            id: '23010342', 
+            name: 'Nguyễn Duy Anh', 
+            cls: 'K17-KTPM(EL)_1', 
+            dob: '25/04/2005',
+            taken: {
+                'FFS703002': { passed: true, tkhp: '8.0', diemChu: 'B+' },
+                'FFS702003': { passed: true, tkhp: '7.5', diemChu: 'B' },
+                'FFS702001': { passed: true, tkhp: '9.0', diemChu: 'A' },
+                'FFS703007': { passed: true, tkhp: '8.5', diemChu: 'A' },
+                'FFS703008': { passed: false, tkhp: '3.0', diemChu: 'F' }, // Debt
+                'FFS703013': { passed: true, tkhp: '6.5', diemChu: 'C+' },
+                'CSE703024': { passed: true, tkhp: '7.0', diemChu: 'B' }
+            }
+        },
+        { 
+            id: '23010357', 
+            name: 'Nguyễn Quang Anh', 
+            cls: 'K17-KTPM(EL)_1', 
+            dob: '11/05/2005',
+            taken: {
+                'FFS703002': { passed: true, tkhp: '7.0', diemChu: 'B' },
+                'FFS702003': { passed: true, tkhp: '6.5', diemChu: 'C+' },
+                'FFS702001': { passed: true, tkhp: '8.0', diemChu: 'B+' },
+                'FFS703007': { passed: true, tkhp: '5.5', diemChu: 'C' },
+                'FFS703008': { passed: true, tkhp: '8.5', diemChu: 'A' },
+                'FFS703013': { passed: false, tkhp: '3.5', diemChu: 'F' }, // Debt
+                'CSE703024': { passed: true, tkhp: '7.5', diemChu: 'B' }
+            }
+        },
+        { 
+            id: '23010442', 
+            name: 'Vũ Đức Anh', 
+            cls: 'K17-KTPM(EL)_1', 
+            dob: '14/02/2005',
+            taken: {
+                'FFS703002': { passed: true, tkhp: '6.0', diemChu: 'C' },
+                'FFS702003': { passed: false, tkhp: '2.5', diemChu: 'F' }, // Debt
+                'FFS702001': { passed: true, tkhp: '7.5', diemChu: 'B' },
+                'FFS703007': { passed: false, tkhp: '3.4', diemChu: 'F' }, // Debt
+                'FFS703008': { passed: true, tkhp: '7.0', diemChu: 'B' },
+                'FFS703013': { passed: true, tkhp: '6.0', diemChu: 'C' },
+                'CSE703107': { passed: true, tkhp: '8.0', diemChu: 'B+' }
+            }
+        },
+        { 
+            id: '23010283', 
+            name: 'Trần Ngọc An', 
+            cls: 'K17-KTPM(EL)_1', 
+            dob: '25/04/2005',
+            taken: {
+                'FFS703002': { passed: true, tkhp: '8.5', diemChu: 'A' },
+                'FFS702003': { passed: true, tkhp: '8.0', diemChu: 'B+' },
+                'FFS702001': { passed: true, tkhp: '9.5', diemChu: 'A+' },
+                'FFS703007': { passed: true, tkhp: '8.0', diemChu: 'B+' },
+                'FFS703008': { passed: true, tkhp: '7.5', diemChu: 'B' },
+                'FFS703013': { passed: true, tkhp: '8.0', diemChu: 'B+' },
+                'CSE703024': { passed: true, tkhp: '9.0', diemChu: 'A' },
+                'CSE703107': { passed: true, tkhp: '8.5', diemChu: 'A' },
+                'CSE703029': { passed: true, tkhp: '8.0', diemChu: 'B+' },
+                'CSE703006': { passed: true, tkhp: '7.5', diemChu: 'B' }
+            }
+        }
     ];
 
-    mockStudents.forEach((st, idx) => {
-        let formattedDebts = [];
-        st.debts.forEach(d => {
-            formattedDebts.push({
-                subjectName: d.subj,
-                tkhp: d.tkhp,
-                diemChu: d.diemChu,
-                danhGia: d.reason,
-                reason: d.reason
-            });
-
-            globalData.subjectsMap[d.subj].totalDebts++;
-            globalData.subjectsMap[d.subj].debtStudents.push({
-                id: st.id,
-                name: st.name,
-                className: st.cls,
-                reason: d.reason,
-                tkhp: d.tkhp,
-                diemChu: d.diemChu
-            });
+    mockStudentsRaw.forEach((st, idx) => {
+        let debts = [];
+        Object.entries(st.taken).forEach(([code, grade]) => {
+            if (!grade.passed) {
+                const subName = mockSubjects.find(s => s.includes(code)) || `${code} - Học lại`;
+                const dObj = {
+                    subjectName: subName,
+                    tkhp: grade.tkhp,
+                    diemChu: grade.diemChu,
+                    danhGia: 'HỌC LẠI',
+                    reason: `TKHP: ${grade.tkhp}`
+                };
+                debts.push(dObj);
+                globalData.subjectsMap[subName].totalDebts++;
+                globalData.subjectsMap[subName].debtStudents.push({
+                    id: st.id,
+                    name: st.name,
+                    className: st.cls,
+                    reason: dObj.reason,
+                    tkhp: grade.tkhp,
+                    diemChu: grade.diemChu
+                });
+            }
         });
 
         globalData.students.push({
             stt: idx + 1,
             id: st.id,
             name: st.name,
-            dob: '2003-08-15',
+            dob: st.dob,
             email: `${st.id}@phenikaa-uni.edu.vn`,
             className: st.cls,
-            debts: formattedDebts
+            debts: debts,
+            coursesTaken: st.taken,
+            studyPlan: {}
         });
     });
 
+    document.getElementById('frameworkLoadedBadge').classList.remove('hidden');
     populateFilters();
     renderDashboard();
-    showCustomMessage("Đã nạp dữ liệu mẫu thử nghiệm thành công!");
+    showCustomMessage("Đã nạp dữ liệu mẫu đối sánh lộ trình tốt nghiệp!");
 }
 
 function populateFilters() {
     const classFilter = document.getElementById('classFilterSelect');
-    classFilter.innerHTML = '<option value="ALL">Tất cả Lớp / Sheet</option>';
-    globalData.classList.forEach(cls => {
-        classFilter.innerHTML += `<option value="${cls}">${cls}</option>`;
-    });
-
-    document.getElementById('sheetCountBadge').innerText = `${globalData.sheets.length} Sheet / Lớp`;
+    if (classFilter) {
+        classFilter.innerHTML = '<option value="ALL">Tất cả Lớp / Sheet</option>';
+        globalData.classList.forEach(cls => {
+            classFilter.innerHTML += `<option value="${cls}">${cls}</option>`;
+        });
+    }
+    const badge = document.getElementById('sheetCountBadge');
+    if (badge) {
+        badge.innerText = `${globalData.sheets.length} Sheet / Lớp`;
+    }
 }
 
 function switchTab(tabName) {
     currentTab = tabName;
     document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('bg-white', 'text-brand-700', 'shadow-sm', 'font-semibold');
-        btn.classList.add('text-slate-600', 'font-medium');
+        btn.classList.remove('bg-white', 'text-brand-700', 'shadow-sm', 'font-bold');
+        btn.classList.add('text-slate-600', 'font-semibold');
     });
 
     const activeBtn = document.getElementById(`tabBtn-${tabName}`);
     if (activeBtn) {
-        activeBtn.classList.add('bg-white', 'text-brand-700', 'shadow-sm', 'font-semibold');
-        activeBtn.classList.remove('text-slate-600', 'font-medium');
+        activeBtn.classList.add('bg-white', 'text-brand-700', 'shadow-sm', 'font-bold');
+        activeBtn.classList.remove('text-slate-600', 'font-semibold');
     }
 
     document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
-    document.getElementById(`tabContent-${tabName}`).classList.remove('hidden');
+    const contentPanel = document.getElementById(`tabContent-${tabName}`);
+    if (contentPanel) {
+        contentPanel.classList.remove('hidden');
+    }
 
     if (tabName === 'overview') renderOverviewTab();
-    else if (tabName === 'students' && globalData.students.length > 0) renderStudentsTab();
     else if (tabName === 'students') renderStudentsTab();
     else if (tabName === 'subjects') renderSubjectsTab();
     else if (tabName === 'logs') renderLogsTab();
@@ -553,38 +837,29 @@ function renderDashboard() {
     const emptyStateContainer = document.getElementById('emptyStateContainer');
     const dataDependentContent = document.getElementById('dataDependentContent');
 
-    // Always show the dashboard, hide the initial full-page upload section
-    if (uploadSection) uploadSection.classList.add('hidden');
-    if (dashboardSection) dashboardSection.classList.remove('hidden');
-
     if (hasData) {
-        // --- STATE: CÓ DỮ LIỆU ---
+        if (uploadSection) uploadSection.classList.add('hidden');
+        if (dashboardSection) dashboardSection.classList.remove('hidden');
         if (headerActions) headerActions.classList.remove('hidden');
         if (emptyStateContainer) emptyStateContainer.classList.add('hidden');
         if (dataDependentContent) dataDependentContent.classList.remove('hidden');
 
-        // Hiển thị các tab liên quan đến dữ liệu
         document.getElementById('tabBtn-overview').classList.remove('hidden');
         document.getElementById('tabBtn-students').classList.remove('hidden');
         document.getElementById('tabBtn-subjects').classList.remove('hidden');
 
         switchTab(currentTab);
     } else {
-        // --- STATE: CHƯA CÓ DỮ LIỆU ---
+        if (uploadSection) uploadSection.classList.remove('hidden');
+        if (dashboardSection) dashboardSection.classList.add('hidden');
         if (headerActions) headerActions.classList.add('hidden');
-        if (emptyStateContainer) emptyStateContainer.classList.remove('hidden');
+        if (emptyStateContainer) emptyStateContainer.classList.add('hidden');
         if (dataDependentContent) dataDependentContent.classList.add('hidden');
-
-        // Chỉ hiển thị tab "Nhật ký" vì nó không phụ thuộc dữ liệu
-        document.getElementById('tabBtn-overview').classList.add('hidden');
-        document.getElementById('tabBtn-students').classList.add('hidden');
-        document.getElementById('tabBtn-subjects').classList.add('hidden');
-        switchTab('logs');
     }
 }
 
 function renderOverviewTab() {
-    if (globalData.students.length === 0) return; // Don't render if no data
+    if (globalData.students.length === 0) return;
 
     const totalStudents = globalData.students.length;
     const debtStudents = globalData.students.filter(s => s.debts.length > 0);
@@ -657,11 +932,11 @@ function renderChart() {
             datasets: [{
                 label: 'Số sinh viên đang nợ môn',
                 data: dataValues,
-                backgroundColor: 'rgba(239, 68, 68, 0.75)',
-                borderColor: 'rgba(220, 38, 38, 1)',
+                backgroundColor: 'rgba(242, 111, 33, 0.85)', // Phenikaa Orange
+                borderColor: 'rgba(214, 85, 9, 1)',
                 borderWidth: 1.5,
                 borderRadius: 10,
-                hoverBackgroundColor: 'rgba(220, 38, 38, 0.9)'
+                hoverBackgroundColor: 'rgba(214, 85, 9, 0.95)'
             }]
         },
         options: {
@@ -670,7 +945,7 @@ function renderChart() {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: '#1e293b',
+                    backgroundColor: '#00205b', // Phenikaa Navy Blue
                     padding: 12,
                     titleFont: { size: 13, weight: 'bold' },
                     bodyFont: { size: 12 },
@@ -693,7 +968,7 @@ function renderChart() {
 }
 
 function renderStudentsTab() {
-    if (globalData.students.length === 0) return; // Don't render if no data
+    if (globalData.students.length === 0) return;
 
     const searchQuery = normalizeText(document.getElementById('studentSearchInput').value);
     const classFilter = document.getElementById('classFilterSelect').value;
@@ -722,6 +997,8 @@ function renderStudentsTab() {
         `;
         return;
     }
+
+    const hasFramework = globalData.frameworkCourses.length > 0;
 
     filteredStudents.forEach((st, idx) => {
         const hasDebt = st.debts.length > 0;
@@ -766,14 +1043,18 @@ function renderStudentsTab() {
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-3 md:pt-0">
+                    <div class="flex items-center justify-between md:justify-end gap-2.5 border-t md:border-t-0 pt-3 md:pt-0">
                         ${statusBadge}
+                        <button onclick="openPlannerModal('${st.id}')" class="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5" ${hasFramework ? '' : 'disabled title="Vui lòng tải lên Khung chương trình" style="opacity: 0.5; cursor: not-allowed;"'}>
+                            <i class="fa-solid fa-map-location-dot"></i>
+                            <span>Lộ trình & Kế hoạch</span>
+                        </button>
                         ${hasDebt ? `
                             <button onclick="openSendModal('${st.id}')" class="text-xs font-semibold text-sky-600 hover:text-sky-800 bg-sky-50 px-3 py-1.5 rounded-xl transition-colors" title="Gửi thông báo nợ môn">
                                 <i class="fa-solid fa-paper-plane"></i>
                             </button>
-                            <button onclick="toggleAccordion('debt-acc-${idx}')" class="text-xs font-semibold text-brand-600 hover:text-brand-800 bg-brand-50 px-3 py-1.5 rounded-xl transition-colors">
-                                Chi tiết môn nợ <i class="fa-solid fa-chevron-down ml-1"></i>
+                            <button onclick="toggleAccordion('debt-acc-${idx}')" class="text-xs font-bold text-brand-700 hover:text-brand-800 bg-brand-50 px-3 py-1.5 rounded-xl transition-colors">
+                                Chi tiết nợ <i class="fa-solid fa-chevron-down ml-1"></i>
                             </button>
                         ` : ''}
                     </div>
@@ -795,7 +1076,7 @@ function toggleAccordion(id) {
 }
 
 function renderSubjectsTab() {
-    if (globalData.students.length === 0) return; // Don't render if no data
+    if (globalData.students.length === 0) return;
 
     const searchQuery = normalizeText(document.getElementById('subjectSearchInput').value);
     const container = document.getElementById('subjectsGridContainer');
@@ -836,7 +1117,7 @@ function renderSubjectsTab() {
                     <div class="flex items-center gap-2">
                         ${hasDebts ? `
                             <button onclick="openSendModal(null, '${encodeURIComponent(subj.name)}')" class="text-xs font-semibold text-sky-600 hover:text-sky-800 bg-sky-50 px-3 py-1.5 rounded-xl transition-colors" title="Gửi thông báo cho SV nợ môn này"><i class="fa-solid fa-paper-plane"></i></button>
-                            <button onclick="openSubjectModal('${encodeURIComponent(subj.name)}')" class="text-xs font-bold text-brand-600 hover:text-brand-800 bg-brand-50 px-3 py-1.5 rounded-xl transition-colors">
+                            <button onclick="openSubjectModal('${encodeURIComponent(subj.name)}')" class="text-xs font-bold text-brand-700 hover:text-brand-800 bg-brand-50 px-3 py-1.5 rounded-xl transition-colors">
                                 Xem danh sách SV <i class="fa-solid fa-arrow-right ml-1"></i>
                             </button>
                         ` : ''}
@@ -879,6 +1160,469 @@ function closeSubjectModal() {
     document.getElementById('subjectDetailModal').classList.add('hidden');
 }
 
+// -------------------------------------------------------------
+// GRADUATION PLANNERS & SEMESTER PLANNING FUNCTIONS
+// -------------------------------------------------------------
+
+function openPlannerModal(studentId) {
+    const student = globalData.students.find(s => s.id === studentId);
+    if (!student) return;
+
+    currentSelectedStudentForPlanner = student;
+
+    // Set header details
+    document.getElementById('plannerModalStudentInfo').innerHTML = `
+        Sinh viên: <span class="font-bold text-white text-sm">${student.name}</span> • 
+        MSSV: <span class="font-bold text-white">${student.id}</span> • 
+        Lớp: <span class="font-bold text-white">${student.className}</span>
+    `;
+
+    // Process & calculate stats
+    const frameworkCourses = globalData.frameworkCourses;
+    const coursesTaken = student.coursesTaken || {};
+
+    let passedCredits = 0;
+    let failedCredits = 0;
+    let unstudiedCredits = 0;
+
+    let passedCount = 0;
+    let failedCount = 0;
+    let unstudiedCount = 0;
+
+    // Group framework courses by block
+    let roadmapGroups = {};
+
+    frameworkCourses.forEach(course => {
+        const code = course.courseCode;
+        const takenInfo = coursesTaken[code];
+        
+        let status = 'UNSTUDIED'; // PASSED, DEBT, UNSTUDIED
+        let gradeDesc = '-';
+
+        if (takenInfo) {
+            if (takenInfo.passed) {
+                status = 'PASSED';
+                passedCredits += course.credits;
+                passedCount++;
+                gradeDesc = `${takenInfo.tkhp || ''} (${takenInfo.diemChu || ''})`;
+            } else {
+                status = 'DEBT';
+                failedCredits += course.credits;
+                failedCount++;
+                gradeDesc = `${takenInfo.tkhp || ''} (${takenInfo.diemChu || 'F'}) - Nợ`;
+            }
+        } else {
+            status = 'UNSTUDIED';
+            unstudiedCredits += course.credits;
+            unstudiedCount++;
+        }
+
+        // Initialize block array
+        if (!roadmapGroups[course.blockId]) {
+            roadmapGroups[course.blockId] = {
+                name: course.blockName,
+                courses: []
+            };
+        }
+
+        roadmapGroups[course.blockId].courses.push({
+            ...course,
+            status,
+            gradeDesc
+        });
+    });
+
+    const totalFrameworkCredits = globalData.frameworkMetadata.totalCredits || 1;
+    const progressPercent = Math.min(100, ((passedCredits / totalFrameworkCredits) * 100)).toFixed(1);
+
+    // Render KPIs
+    document.getElementById('plannerProgressPercent').innerText = `${progressPercent}% (${passedCredits}/${totalFrameworkCredits} TC)`;
+    document.getElementById('plannerProgressBar').style.width = `${progressPercent}%`;
+    document.getElementById('plannerPassedCount').innerText = passedCount;
+    document.getElementById('plannerFailedCount').innerText = failedCount;
+    document.getElementById('plannerUnstudiedCount').innerText = unstudiedCount;
+
+    // Save calculations on student object for printing
+    student.stats = {
+        passedCredits,
+        totalFrameworkCredits,
+        progressPercent,
+        passedCount,
+        failedCount,
+        unstudiedCount
+    };
+
+    // Render Tab 1: Roadmap matching
+    renderRoadmapTab(roadmapGroups);
+
+    // Render Tab 2: Study planner
+    renderPlannerTab();
+
+    // Reset default active tab
+    switchPlannerTab('roadmap');
+
+    document.getElementById('studentPlannerModal').classList.remove('hidden');
+}
+
+function closePlannerModal() {
+    document.getElementById('studentPlannerModal').classList.add('hidden');
+    currentSelectedStudentForPlanner = null;
+    // Re-render students list to show updated indicators if any
+    renderStudentsTab();
+}
+
+function switchPlannerTab(tabName) {
+    currentPlannerTab = tabName;
+    document.querySelectorAll('.planner-tab-btn').forEach(btn => {
+        btn.classList.remove('bg-brand-50', 'text-brand-700', 'font-bold');
+        btn.classList.add('text-slate-600', 'font-semibold');
+    });
+
+    const activeBtn = document.getElementById(`plannerTabBtn-${tabName}`);
+    if (activeBtn) {
+        activeBtn.classList.add('bg-brand-50', 'text-brand-700', 'font-bold');
+        activeBtn.classList.remove('text-slate-600', 'font-semibold');
+    }
+
+    document.querySelectorAll('.planner-tab-content').forEach(c => c.classList.add('hidden'));
+    document.getElementById(`plannerTabContent-${tabName}`).classList.remove('hidden');
+}
+
+// Render matching alignment categorized by Knowledge Blocks
+function renderRoadmapTab(roadmapGroups) {
+    const container = document.getElementById('plannerTabContent-roadmap');
+    container.innerHTML = '';
+
+    if (Object.keys(roadmapGroups).length === 0) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-400">Không có dữ liệu đối sánh.</div>`;
+        return;
+    }
+
+    Object.entries(roadmapGroups).forEach(([blockId, block]) => {
+        let rowsHtml = block.courses.map(c => {
+            let statusBadge = '';
+            let rowBg = '';
+            
+            if (c.status === 'PASSED') {
+                statusBadge = '<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md"><i class="fa-solid fa-circle-check mr-1"></i>Đã đạt</span>';
+                rowBg = 'bg-white';
+            } else if (c.status === 'DEBT') {
+                statusBadge = '<span class="px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-md"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Đang nợ</span>';
+                rowBg = 'bg-rose-50/20';
+            } else {
+                statusBadge = '<span class="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-semibold rounded-md"><i class="fa-solid fa-circle-minus mr-1"></i>Chưa học</span>';
+                rowBg = 'bg-white';
+            }
+
+            return `
+                <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors ${rowBg}">
+                    <td class="py-2.5 px-3 font-semibold text-slate-500">${c.courseCode}</td>
+                    <td class="py-2.5 px-3 font-bold text-slate-800 text-xs sm:text-sm">${c.courseName}</td>
+                    <td class="py-2.5 px-3 text-center font-bold text-slate-600">${c.credits}</td>
+                    <td class="py-2.5 px-3 text-center">${statusBadge}</td>
+                    <td class="py-2.5 px-3 font-semibold text-slate-500 text-right">${c.gradeDesc}</td>
+                </tr>
+            `;
+        }).join('');
+
+        container.innerHTML += `
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                <h4 class="font-extrabold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                    <span class="w-2.5 h-4 bg-brand-700 rounded-sm"></span>
+                    ${blockId} - ${block.name}
+                </h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                                <th class="py-2 px-3 w-28">Mã Học Phần</th>
+                                <th class="py-2 px-3">Tên Học Phần</th>
+                                <th class="py-2 px-3 text-center w-16">Tín Chỉ</th>
+                                <th class="py-2 px-3 text-center w-24">Trạng Thái</th>
+                                <th class="py-2 px-3 text-right w-28">Điểm / Ghi Chú</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    });
+}
+
+// Render study planner for remaining courses
+function renderPlannerTab() {
+    const student = currentSelectedStudentForPlanner;
+    const container = document.getElementById('plannerTabContent-planner');
+    container.innerHTML = '';
+
+    const frameworkCourses = globalData.frameworkCourses;
+    const coursesTaken = student.coursesTaken || {};
+
+    // Filter remaining courses: either debted or never taken
+    let remainingCourses = frameworkCourses.filter(c => {
+        const taken = coursesTaken[c.courseCode];
+        return !taken || !taken.passed;
+    });
+
+    if (remainingCourses.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-12 bg-white rounded-3xl border border-slate-200">
+                <i class="fa-solid fa-graduation-cap text-4xl text-emerald-500 mb-3"></i>
+                <h4 class="font-bold text-slate-800 text-lg">Chúc mừng! Sinh viên đã hoàn thành tất cả môn học</h4>
+                <p class="text-slate-500 text-xs mt-1">Đã tích lũy đủ 100% tín chỉ khung chương trình đào tạo.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Grid of planning interface: Left column is selector, Right column is visual semesters
+    container.innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <!-- Left panel: courses selector -->
+            <div class="lg:col-span-3 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <h4 class="font-extrabold text-slate-800 text-sm border-b pb-2"><i class="fa-solid fa-list-ul mr-1.5 text-phenikaa-orange"></i>Phân Bổ Học Phần Còn Thiếu</h4>
+                <div class="space-y-3 custom-scrollbar overflow-y-auto max-h-96 pr-1" id="plannerSelectorsList">
+                    <!-- Dynamic select lists -->
+                </div>
+            </div>
+
+            <!-- Right panel: visual semester columns summary -->
+            <div class="lg:col-span-2 space-y-4" id="plannerSemestersSummary">
+                <!-- Semester summary cards -->
+            </div>
+        </div>
+    `;
+
+    // Render selector lists
+    const selectorContainer = document.getElementById('plannerSelectorsList');
+    
+    remainingCourses.forEach(c => {
+        const currentSemester = student.studyPlan[c.courseCode] || '';
+        const isDebt = coursesTaken[c.courseCode] && !coursesTaken[c.courseCode].passed;
+
+        const selectHtml = `
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <span class="font-bold text-slate-800 text-xs sm:text-sm truncate">${c.courseName}</span>
+                        <span class="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded font-semibold text-slate-600 shrink-0">${c.credits} TC</span>
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        <span>Code: ${c.courseCode}</span> • 
+                        ${isDebt 
+                            ? '<span class="text-rose-600 font-bold"><i class="fa-solid fa-triangle-exclamation mr-0.5"></i>Nợ F</span>' 
+                            : '<span class="text-slate-500 font-medium">Chưa học</span>'}
+                    </div>
+                </div>
+                <div class="shrink-0">
+                    <select onchange="updatePlannerSemester('${c.courseCode}', this.value)" class="bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-700">
+                        <option value="">-- Chưa lập kế hoạch --</option>
+                        <option value="Kỳ 1 năm tới" ${currentSemester === 'Kỳ 1 năm tới' ? 'selected' : ''}>Kỳ 1 năm tới</option>
+                        <option value="Kỳ 2 năm tới" ${currentSemester === 'Kỳ 2 năm tới' ? 'selected' : ''}>Kỳ 2 năm tới</option>
+                        <option value="Kỳ hè" ${currentSemester === 'Kỳ hè' ? 'selected' : ''}>Kỳ hè</option>
+                    </select>
+                </div>
+            </div>
+        `;
+        selectorContainer.insertAdjacentHTML('beforeend', selectHtml);
+    });
+
+    updateSemestersSummaryView();
+}
+
+function updatePlannerSemester(courseCode, semesterVal) {
+    const student = currentSelectedStudentForPlanner;
+    if (!student) return;
+
+    if (semesterVal === '') {
+        delete student.studyPlan[courseCode];
+    } else {
+        student.studyPlan[courseCode] = semesterVal;
+    }
+
+    updateSemestersSummaryView();
+}
+
+// Calculate planned credits and update semester summary display
+function updateSemestersSummaryView() {
+    const student = currentSelectedStudentForPlanner;
+    if (!student) return;
+
+    const semesters = ["Kỳ 1 năm tới", "Kỳ 2 năm tới", "Kỳ hè"];
+    const container = document.getElementById('plannerSemestersSummary');
+    container.innerHTML = '';
+
+    const frameworkCourses = globalData.frameworkCourses;
+
+    semesters.forEach(semName => {
+        // Find courses planned for this semester
+        let plannedCourses = [];
+        let plannedCredits = 0;
+
+        Object.entries(student.studyPlan).forEach(([code, sem]) => {
+            if (sem === semName) {
+                const cObj = frameworkCourses.find(c => c.courseCode === code);
+                if (cObj) {
+                    plannedCourses.push(cObj);
+                    plannedCredits += cObj.credits;
+                }
+            }
+        });
+
+        const listHtml = plannedCourses.map(c => `
+            <div class="flex items-center justify-between text-xs py-1.5 border-b border-slate-100 last:border-b-0">
+                <span class="font-medium text-slate-700 truncate max-w-[200px]">${c.courseName}</span>
+                <span class="font-bold text-slate-500 shrink-0">${c.credits} TC</span>
+            </div>
+        `).join('');
+
+        const warningMsg = plannedCredits > 20 
+            ? '<div class="text-[10px] text-rose-600 font-bold mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Vượt quá số TC khuyên dùng (tối đa 20 TC)</div>' 
+            : '';
+
+        const cardHtml = `
+            <div class="bg-white p-4 rounded-2xl border ${plannedCredits > 20 ? 'border-rose-300' : 'border-slate-200/80'} shadow-sm">
+                <div class="flex items-center justify-between border-b pb-2 mb-2">
+                    <h5 class="font-extrabold text-slate-800 text-xs sm:text-sm">${semName}</h5>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-black ${plannedCredits > 20 ? 'bg-rose-100 text-rose-700 animate-pulse' : 'bg-brand-50 text-brand-700'}">
+                        ${plannedCredits} TC
+                    </span>
+                </div>
+                <div class="space-y-1 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                    ${plannedCourses.length > 0 ? listHtml : '<p class="text-xs text-slate-400 italic py-2">Chưa phân bổ học phần nào...</p>'}
+                </div>
+                ${warningMsg}
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', cardHtml);
+    });
+}
+
+function printPlanner() {
+    const student = currentSelectedStudentForPlanner;
+    if (!student) return;
+
+    const printArea = document.getElementById('printablePlanArea');
+    printArea.innerHTML = '';
+
+    const semesters = ["Kỳ 1 năm tới", "Kỳ 2 năm tới", "Kỳ hè"];
+    let plannedTablesHtml = '';
+
+    semesters.forEach(semName => {
+        let plannedCourses = [];
+        let plannedCredits = 0;
+
+        Object.entries(student.studyPlan).forEach(([code, sem]) => {
+            if (sem === semName) {
+                const cObj = globalData.frameworkCourses.find(c => c.courseCode === code);
+                if (cObj) {
+                    plannedCourses.push(cObj);
+                    plannedCredits += cObj.credits;
+                }
+            }
+        });
+
+        let rows = plannedCourses.map((c, idx) => `
+            <tr>
+                <td style="text-align: center; border: 1px solid #ddd; padding: 8px;">${idx + 1}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">${c.courseCode}</td>
+                <td style="border: 1px solid #ddd; padding: 8px;">${c.courseName}</td>
+                <td style="text-align: center; border: 1px solid #ddd; padding: 8px; font-weight: bold;">${c.credits}</td>
+            </tr>
+        `).join('');
+
+        if (plannedCourses.length === 0) {
+            rows = `<tr><td colspan="4" style="text-align: center; border: 1px solid #ddd; padding: 12px; color: #777; font-style: italic;">Chưa lên kế hoạch đăng ký học phần</td></tr>`;
+        }
+
+        plannedTablesHtml += `
+            <div style="margin-top: 25px;">
+                <h3 style="font-size: 14px; font-weight: bold; border-bottom: 1.5px solid #00205b; padding-bottom: 5px; color: #00205b;">${semName} (Tổng số: ${plannedCredits} Tín chỉ)</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px;">
+                    <thead>
+                        <tr style="background-color: #f9fafb;">
+                            <th style="border: 1px solid #ddd; padding: 8px; width: 50px; text-align: center;">STT</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; width: 120px; text-align: left;">Mã Học Phần</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Tên Học Phần</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; width: 80px; text-align: center;">Tín Chỉ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    });
+
+    const dateStr = new Date().toLocaleDateString('vi-VN');
+
+    // Create a beautiful printable layout
+    printArea.innerHTML = `
+        <div style="font-family: 'Inter', Arial, sans-serif; padding: 40px; color: #333; max-w-4xl mx-auto;">
+            <!-- Header School with logo -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 25px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <img src="https://www.phenikaa.com/logo192.png" style="width: 65px; height: auto;" alt="Logo">
+                    <div>
+                        <div style="font-weight: bold; font-size: 15px; text-transform: uppercase;">Trường Đại Học Phenikaa</div>
+                        <div style="font-size: 12px; color: #555;">Khoa Công nghệ thông tin</div>
+                    </div>
+                </div>
+                <div style="text-align: right; font-size: 12px;">
+                    <div>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+                    <div style="font-weight: bold;">Độc lập - Tự do - Hạnh phúc</div>
+                </div>
+            </div>
+
+            <!-- Title -->
+            <h2 style="text-align: center; font-size: 18px; font-weight: 800; text-transform: uppercase; margin-bottom: 5px; color: #00205b;">KẾ HOẠCH HỌC TẬP & LỘ TRÌNH TỐT NGHIỆP</h2>
+            <p style="text-align: center; font-size: 12px; color: #666; margin-bottom: 25px;">(Xây dựng dựa trên Khung đào tạo K16/K17 khoa Công nghệ thông tin)</p>
+
+            <!-- Student info -->
+            <div style="background-color: #f9fafb; border: 1px solid #eee; padding: 15px; border-radius: 8px; font-size: 13px; line-height: 1.6; margin-bottom: 25px;">
+                <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 10px;">
+                    <div>Họ và tên sinh viên: <strong style="font-size: 14px;">${student.name}</strong></div>
+                    <div>Mã số sinh viên: <strong>${student.id}</strong></div>
+                    <div>Lớp / Sheet: <strong>${student.className}</strong></div>
+                    <div>Ngày sinh: <strong>${student.dob || '-'}</strong></div>
+                </div>
+                <div style="margin-top: 10px; border-t: 1px dashed #ddd; padding-top: 10px;">
+                    Tiến độ hoàn thành: <strong>${student.stats?.progressPercent}%</strong> (${student.stats?.passedCredits} / ${student.stats?.totalFrameworkCredits} Tín chỉ khung). 
+                    Còn lại: Đang nợ <strong>${student.stats?.failedCount} môn</strong>, Chưa học <strong>${student.stats?.unstudiedCount} môn</strong>.
+                </div>
+            </div>
+
+            <!-- Planned Semesters -->
+            <h3 style="font-size: 15px; font-weight: bold; color: #00205b; text-transform: uppercase; margin-top: 30px;">Kế Hoạch Các Học Kỳ Tương Lai</h3>
+            ${plannedTablesHtml}
+
+            <!-- Signature Section -->
+            <div style="margin-top: 50px; display: flex; justify-content: space-between; font-size: 13px;">
+                <div style="text-align: center; width: 250px;">
+                    <div style="font-style: italic;">Sinh viên ký tên</div>
+                    <div style="margin-top: 70px; font-weight: bold;">${student.name}</div>
+                </div>
+                <div style="text-align: center; width: 250px;">
+                    <div style="font-style: italic;">Hà Nội, ngày ${dateStr}</div>
+                    <div style="font-weight: bold; margin-top: 5px;">Xác nhận của Khoa</div>
+                    <div style="margin-top: 65px; color: #bbb;">(Ký và ghi rõ họ tên)</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Trigger printing
+    window.print();
+}
+
+// -------------------------------------------------------------
+// CORE NOTIFICATION & SYSTEM LOGIC
+// -------------------------------------------------------------
+
 function openSendModal(studentId = null, subjectName = null) {
     const modal = document.getElementById('sendNotificationModal');
     const title = document.getElementById('sendModalTitle');
@@ -894,12 +1638,12 @@ function openSendModal(studentId = null, subjectName = null) {
 
         title.innerText = "Gửi Thông Báo Tới Sinh Viên";
         studentInfo.innerHTML = `
-            <span class="font-bold">${student.name}</span>
-            <span class="text-xs bg-slate-100 px-2 py-0.5 rounded">MSSV: ${student.id}</span>
+            <span class="font-bold text-slate-800 text-sm">${student.name}</span>
+            <span class="text-xs bg-slate-100 px-2 py-0.5 rounded font-semibold text-slate-500">MSSV: ${student.id}</span>
         `;
         studentInfo.classList.remove('hidden');
 
-        recipientField.value = student.email || `{${student.id}@phenikaa-uni.edu.vn}`;
+        recipientField.value = student.email || `${student.id}@phenikaa-uni.edu.vn`;
         subjectField.value = `[Thông báo] V/v kết quả học tập và các môn cần xử lý của sinh viên ${student.name}`;
         
         const debtSubjects = student.debts.map(d => `- ${d.subjectName} (Lý do: ${d.reason})`).join('\n');
@@ -950,14 +1694,12 @@ function closeSendModal() {
 }
 
 async function logNotification() {
-    // Đây là hàm DEMO, nó sẽ lưu log vào Firebase thay vì gửi thật
-    // Yêu cầu phải đăng nhập
     if (!firebaseUser) {
         return showCustomMessage("Bạn cần đăng nhập để thực hiện hành động này.", "error");
     }
 
     const modal = document.getElementById('sendNotificationModal');
-    const mode = modal.dataset.mode; // 'single', 'bulk_filter', 'bulk_subject'
+    const mode = modal.dataset.mode;
     const studentId = modal.dataset.studentId;
     const subjectName = modal.dataset.subjectName;
     const subject = document.getElementById('sendModalSubject').value;
@@ -968,7 +1710,7 @@ async function logNotification() {
     if (mode === 'single') {
         const student = globalData.students.find(s => s.id === studentId);
         if (student) targets.push(student);
-    } else if (mode === 'bulk_filter') { // Gửi hàng loạt theo bộ lọc
+    } else if (mode === 'bulk_filter') {
         const classFilter = document.getElementById('classFilterSelect').value;
         targets = globalData.students.filter(s => {
             const inClass = (classFilter === 'ALL' || s.className === classFilter);
@@ -986,7 +1728,6 @@ async function logNotification() {
 
     showCustomMessage(`Đang tạo ${targets.length} log thông báo...`);
 
-    // Lấy tên người gửi từ profile
     let senderName = firebaseUser.email.split('@')[0];
     try {
         const userProfileSnap = await getDoc(doc(db, "user_profiles", firebaseUser.uid));
@@ -1005,13 +1746,13 @@ async function logNotification() {
         
         const recipient = type === 'email' 
             ? (student.email || `${student.id}@phenikaa-uni.edu.vn`)
-            : `+84${student.id}`; // Demo SĐT
+            : `+84${student.id}`;
 
         try {
             await addDoc(collection(db, "communication_logs"), {
                 studentId: student.id,
                 studentName: student.name,
-                type: type, // 'email' or 'message'
+                type: type,
                 recipient: recipient,
                 subject: subject.replace(/{ho_ten}/g, student.name),
                 body: body,
@@ -1022,7 +1763,6 @@ async function logNotification() {
         } catch (e) {
             console.error("Error writing log to Firebase:", e);
             showCustomMessage(`Lỗi khi lưu log cho SV ${student.id}: ${e.message}`, "error");
-            // Dừng lại nếu có lỗi để tránh spam lỗi
             return;
         }
     }
@@ -1073,7 +1813,7 @@ async function renderLogsTab() {
     const container = document.getElementById('logsContainer');
     container.innerHTML = `
         <div class="text-center py-10">
-            <div class="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div class="w-8 h-8 border-4 border-brand-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p class="mt-3 text-sm text-slate-500 font-medium">Đang tải nhật ký từ Firebase...</p>
         </div>
     `;
