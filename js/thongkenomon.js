@@ -1,7 +1,7 @@
 import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, serverTimestamp, doc, getDoc, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, serverTimestamp, doc, getDoc, query, orderBy, limit, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // Initialize Firebase for this page
 const app = initializeApp(firebaseConfig);
@@ -35,6 +35,7 @@ window.addEventListener('DOMContentLoaded', () => {
     window.startAnalysis = startAnalysis;
     window.loadDemoData = loadDemoData;
     window.exportToExcel = exportToExcel;
+    window.exportSummaryToExcel = exportSummaryToExcel; // Add new function to window
     window.switchTab = switchTab;
     window.renderStudentsTab = renderStudentsTab;
     window.renderSubjectsTab = renderSubjectsTab;
@@ -526,7 +527,7 @@ function parseWorkbook(workbook) {
             let email = emailColIdx !== -1 ? String(row[emailColIdx] || '').trim() : '';
 
             if (!email && id.length >= 6 && !isNaN(Number(id))) {
-                email = `${id}@phenikaa-uni.edu.vn`;
+                email = `${id}@st.phenikaa-uni.edu.vn`;
             }
 
             const parsedStt = parseInt(sttVal, 10);
@@ -1160,6 +1161,13 @@ function closeSubjectModal() {
     document.getElementById('subjectDetailModal').classList.add('hidden');
 }
 
+// Define the new semester structure for planning
+const SEMESTER_PLANNING_OPTIONS = [
+    "Kỳ 1.1", "Kỳ 1.2", "Kỳ 1.3",
+    "Kỳ 2.1", "Kỳ 2.2", "Kỳ 2.3",
+    "Kỳ 3.1", "Kỳ 3.2", "Kỳ 3.3"
+];
+
 // -------------------------------------------------------------
 // GRADUATION PLANNERS & SEMESTER PLANNING FUNCTIONS
 // -------------------------------------------------------------
@@ -1419,10 +1427,10 @@ function renderPlannerTab() {
                 </div>
                 <div class="shrink-0">
                     <select onchange="updatePlannerSemester('${c.courseCode}', this.value)" class="bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-700">
-                        <option value="">-- Chưa lập kế hoạch --</option>
-                        <option value="Kỳ 1 năm tới" ${currentSemester === 'Kỳ 1 năm tới' ? 'selected' : ''}>Kỳ 1 năm tới</option>
-                        <option value="Kỳ 2 năm tới" ${currentSemester === 'Kỳ 2 năm tới' ? 'selected' : ''}>Kỳ 2 năm tới</option>
-                        <option value="Kỳ hè" ${currentSemester === 'Kỳ hè' ? 'selected' : ''}>Kỳ hè</option>
+                        <option value="">-- Chọn kỳ --</option>
+                        ${SEMESTER_PLANNING_OPTIONS.map(opt => `
+                            <option value="${opt}" ${currentSemester === opt ? 'selected' : ''}>${opt}</option>
+                        `).join('')}
                     </select>
                 </div>
             </div>
@@ -1451,7 +1459,7 @@ function updateSemestersSummaryView() {
     const student = currentSelectedStudentForPlanner;
     if (!student) return;
 
-    const semesters = ["Kỳ 1 năm tới", "Kỳ 2 năm tới", "Kỳ hè"];
+    const semesters = SEMESTER_PLANNING_OPTIONS;
     const container = document.getElementById('plannerSemestersSummary');
     container.innerHTML = '';
 
@@ -1508,7 +1516,7 @@ function printPlanner() {
     const printArea = document.getElementById('printablePlanArea');
     printArea.innerHTML = '';
 
-    const semesters = ["Kỳ 1 năm tới", "Kỳ 2 năm tới", "Kỳ hè"];
+    const semesters = SEMESTER_PLANNING_OPTIONS;
     let plannedTablesHtml = '';
 
     semesters.forEach(semName => {
@@ -1643,7 +1651,7 @@ function openSendModal(studentId = null, subjectName = null) {
         `;
         studentInfo.classList.remove('hidden');
 
-        recipientField.value = student.email || `${student.id}@phenikaa-uni.edu.vn`;
+        recipientField.value = student.email || `${student.id}@st.phenikaa-uni.edu.vn`;
         subjectField.value = `[Thông báo] V/v kết quả học tập và các môn cần xử lý của sinh viên ${student.name}`;
         
         const debtSubjects = student.debts.map(d => `- ${d.subjectName} (Lý do: ${d.reason})`).join('\n');
@@ -1705,6 +1713,7 @@ async function logNotification() {
     const subject = document.getElementById('sendModalSubject').value;
     const bodyTemplate = document.getElementById('sendModalBody').value;
     const type = document.querySelector('input[name="sendType"]:checked').value;
+    const logsCollection = collection(db, "communication_logs");
 
     let targets = [];
     if (mode === 'single') {
@@ -1736,20 +1745,27 @@ async function logNotification() {
         }
     } catch (e) { console.error("Could not fetch sender profile:", e); }
 
-    for (const student of targets) {
-        const debtListStr = student.debts.map(d => `- ${d.subjectName} (Lý do: ${d.reason})`).join('\n');
-        const body = bodyTemplate
-            .replace(/{ho_ten}/g, student.name)
-            .replace(/{mssv}/g, student.id)
-            .replace(/{so_mon_no}/g, student.debts.length)
-            .replace(/{danh_sach_mon_no}/g, debtListStr);
-        
-        const recipient = type === 'email' 
-            ? (student.email || `${student.id}@phenikaa-uni.edu.vn`)
-            : `+84${student.id}`;
+    // Use WriteBatch for performance
+    const maxBatchSize = 500; // Firestore batch limit
+    let batch = writeBatch(db);
+    let operationCount = 0;
 
-        try {
-            await addDoc(collection(db, "communication_logs"), {
+    try {
+        for (let i = 0; i < targets.length; i++) {
+            const student = targets[i];
+            const debtListStr = student.debts.map(d => `- ${d.subjectName} (Lý do: ${d.reason})`).join('\n');
+            const body = bodyTemplate
+                .replace(/{ho_ten}/g, student.name)
+                .replace(/{mssv}/g, student.id)
+                .replace(/{so_mon_no}/g, student.debts.length)
+                .replace(/{danh_sach_mon_no}/g, debtListStr);
+            
+            const recipient = type === 'email' 
+                ? (student.email || `${student.id}@st.phenikaa-uni.edu.vn`)
+                : `+84${student.id}`;
+
+            const newLogRef = doc(logsCollection); // Create a new doc reference
+            batch.set(newLogRef, {
                 studentId: student.id,
                 studentName: student.name,
                 type: type,
@@ -1760,12 +1776,21 @@ async function logNotification() {
                 sentBy_name: senderName,
                 sentAt: serverTimestamp()
             });
-        } catch (e) {
-            console.error("Error writing log to Firebase:", e);
-            showCustomMessage(`Lỗi khi lưu log cho SV ${student.id}: ${e.message}`, "error");
-            return;
+            operationCount++;
+
+            // If batch is full or it's the last item, commit the batch
+            if (operationCount === maxBatchSize || i === targets.length - 1) {
+                await batch.commit();
+                batch = writeBatch(db); // Start a new batch
+                operationCount = 0;
+            }
         }
+    } catch (e) {
+        console.error("Error writing batch to Firebase:", e);
+        showCustomMessage(`Lỗi khi lưu hàng loạt: ${e.message}`, "error");
+        return;
     }
+
     showCustomMessage(`Đã lưu thành công ${targets.length} log thông báo!`, "success");
     closeSendModal();
 }
@@ -1807,6 +1832,55 @@ function exportToExcel() {
 
     XLSX.writeFile(workbook, "Bao_Cao_Danh_Sach_No_Mon_Sinh_Vien.xlsx");
     showCustomMessage("Đã xuất file báo cáo Excel thành công!");
+}
+
+function exportSummaryToExcel() {
+    if (!globalData.students || globalData.students.length === 0) {
+        showCustomMessage("Chưa có dữ liệu để xuất file!", "error");
+        return;
+    }
+
+    let exportRows = [];
+    const studentsWithDebt = globalData.students.filter(st => st.debts.length > 0);
+
+    if (studentsWithDebt.length === 0) {
+        showCustomMessage("Tất cả sinh viên đều đã đạt/sạch nợ, không có dữ liệu tổng hợp để xuất!");
+        return;
+    }
+
+    studentsWithDebt.forEach(st => {
+        const debtSubjectsList = st.debts.map(d => `- ${d.subjectName} (Lý do: ${d.reason})`).join('\n');
+        
+        const emailSubject = `[Thông báo] V/v kết quả học tập và các môn cần xử lý của sinh viên ${st.name}`;
+        const emailBody = `Chào em ${st.name},\n\nKhoa Công nghệ thông tin thông báo về tình hình học tập của em.\nHiện tại, hệ thống ghi nhận em đang có ${st.debts.length} môn học chưa đạt, cần phải xử lý, cụ thể:\n\n${debtSubjectsList}\n\nĐề nghị em theo dõi lịch của phòng Đào tạo và các thông báo của Khoa để đăng ký học lại/thi lại các học phần trên trong thời gian sớm nhất.\n\nTrân trọng,\nKhoa Công nghệ thông tin.`;
+
+        exportRows.push({
+            "Lớp / Sheet": st.className,
+            "Mã Số Sinh Viên": st.id,
+            "Họ Và Tên": st.name,
+            "Email": st.email,
+            "Tiêu đề Email": emailSubject,
+            "Nội dung Email": emailBody
+        });
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "TongHopNoMon");
+
+    // Set column widths for better readability
+    const colWidths = [
+        { wch: 15 }, // Lớp / Sheet
+        { wch: 15 }, // Mã Số Sinh Viên
+        { wch: 25 }, // Họ Và Tên
+        { wch: 30 }, // Email
+        { wch: 50 }, // Tiêu đề Email
+        { wch: 80 }  // Nội dung Email
+    ];
+    worksheet['!cols'] = colWidths;
+
+    XLSX.writeFile(workbook, "Bao_Cao_Tong_Hop_No_Mon_Sinh_Vien.xlsx");
+    showCustomMessage("Đã xuất file báo cáo tổng hợp Excel thành công!");
 }
 
 async function renderLogsTab() {
