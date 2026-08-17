@@ -1,4 +1,14 @@
 import { firebaseConfig } from './firebase-config.js';
+import { normalizeText, readWorkbookFromFile } from './excel/workbook-utils.js';
+import { parseScoreWorkbook } from './excel/score-parser.js';
+import { parseFrameworkWorkbook as parseFrameworkWorkbookData } from './excel/framework-parser.js';
+import { analyzeStudentAgainstFramework, analyzeFrameworkDemand } from './excel/framework-analysis.js';
+import {
+    buildSubjectStudentsReport,
+    buildDebtReport,
+    buildDebtSummaryReport,
+    buildClassOpeningReportSheets
+} from './excel/report-exporter.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, serverTimestamp, doc, getDoc, query, orderBy, limit, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -36,12 +46,14 @@ window.addEventListener('DOMContentLoaded', () => {
     window.loadDemoData = loadDemoData;
     window.exportToExcel = exportToExcel;
     window.exportSummaryToExcel = exportSummaryToExcel; // Add new function to window
+    window.exportClassOpeningReport = exportClassOpeningReport;
     window.switchTab = switchTab;
     window.renderStudentsTab = renderStudentsTab;
     window.renderSubjectsTab = renderSubjectsTab;
     window.toggleAccordion = toggleAccordion;
     window.openSubjectModal = openSubjectModal;
     window.closeSubjectModal = closeSubjectModal;
+    window.exportSubjectStudentsToExcel = exportSubjectStudentsToExcel;
     window.openSendModal = openSendModal;
     window.closeSendModal = closeSendModal;
     window.logNotification = logNotification;
@@ -128,11 +140,8 @@ function handleFileSelect(event, type) {
 
 // Read Excel file into memory and update UI
 function loadExcelFile(file, type) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
+    readWorkbookFromFile(file)
+        .then(workbook => {
             
             if (type === 'student') {
                 loadedStudentWorkbook = workbook;
@@ -146,12 +155,11 @@ function loadExcelFile(file, type) {
                 document.getElementById('frameworkFileStatus').className = "mt-4 px-3.5 py-1 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold";
                 showCustomMessage("Đã nạp khung chương trình đào tạo thành công!", "success");
             }
-        } catch (err) {
+        })
+        .catch(err => {
             console.error("Error reading file:", err);
             showCustomMessage(`Lỗi đọc file Excel ${type}: ` + err.message, "error");
-        }
-    };
-    reader.readAsArrayBuffer(file);
+        });
 }
 
 // Execute analysis when "Bắt Đầu Phân Tích" is clicked
@@ -231,414 +239,33 @@ function showCustomMessage(msg, type = 'info') {
     }, 4000);
 }
 
-function normalizeText(str) {
-    if (str === null || str === undefined) return '';
-    return String(str)
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/đ/g, "d").replace(/Đ/g, "D")
-        .toUpperCase()
-        .trim();
-}
-
-function getLatestAttempt(value) {
-    if (value === null || value === undefined) return '';
-    const str = String(value).trim();
-    if (str.includes('|')) {
-        const parts = str.split('|');
-        return parts[parts.length - 1].trim(); // Get the last element
-    }
-    return str;
-}
-
 // Parse Curricular Framework sheet
 function parseFrameworkWorkbook(workbook) {
-    globalData.frameworkCourses = [];
-    globalData.frameworkMetadata = { totalCredits: 0 };
+    const parsedFramework = parseFrameworkWorkbookData(workbook);
 
-    // Select the first sheet (usually the framework list)
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) return;
+    globalData.frameworkCourses = parsedFramework.courses;
+    globalData.frameworkMetadata = parsedFramework.metadata;
 
-    let rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    if (!rawData || rawData.length < 2) return;
-
-    // Propagate merged cells to avoid holes in knowledge block columns
-    if (sheet['!merges']) {
-        sheet['!merges'].forEach(range => {
-            const startVal = rawData[range.s.r] ? rawData[range.s.r][range.s.c] : '';
-            if (startVal !== undefined && startVal !== null && String(startVal).trim() !== '') {
-                for (let r = range.s.r; r <= range.e.r; r++) {
-                    if (!rawData[r]) rawData[r] = [];
-                    for (let c = range.s.c; c <= range.e.c; c++) {
-                        if (!rawData[r][c] || String(rawData[r][c]).trim() === '') {
-                            rawData[r][c] = startVal;
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    // Dynamic resolution of columns in the framework sheet
-    let colBlockId = 1;
-    let colBlockName = 2;
-    let colCourseCode = 4;
-    let colCourseName = 5;
-    let colCredits = 6;
-
-    // Search header row
-    let headerRowIdx = 0;
-    for (let r = 0; r < Math.min(10, rawData.length); r++) {
-        const row = rawData[r] || [];
-        const str = row.map(c => normalizeText(c)).join(' ');
-        if (str.includes('MA HOC PHAN') || str.includes('TEN HOC PHAN') || str.includes('TIN CHI')) {
-            headerRowIdx = r;
-            row.forEach((cell, idx) => {
-                const norm = normalizeText(cell);
-                if (norm.includes('MA KHOI')) colBlockId = idx;
-                else if (norm.includes('TEN KHOI')) colBlockName = idx;
-                else if (norm.includes('MA HOC PHAN') || norm.includes('MA HP')) colCourseCode = idx;
-                else if (norm.includes('TEN HOC PHAN') || norm.includes('TEN HP')) colCourseName = idx;
-                else if (norm.includes('TIN CHI') || norm.includes('SO TC') || norm === 'TC') colCredits = idx;
-            });
-            break;
-        }
-    }
-
-    let totalCredits = 0;
-    for (let r = headerRowIdx + 1; r < rawData.length; r++) {
-        const row = rawData[r];
-        if (!row || row.length === 0) continue;
-
-        const courseCode = String(row[colCourseCode] || '').trim();
-        const courseName = String(row[colCourseName] || '').trim();
-        const creditsVal = String(row[colCredits] || '').trim();
-
-        const blockId = String(row[colBlockId] || 'Khác').trim();
-        const blockName = String(row[colBlockName] || 'Khối kiến thức khác').trim();
-
-        if (courseCode && courseCode.length >= 3 && courseName && !courseName.includes('CỘNG') && !courseName.includes('Tổng cộng')) {
-            const credits = parseInt(creditsVal, 10) || 0;
-            globalData.frameworkCourses.push({
-                blockId,
-                blockName,
-                courseCode,
-                courseName,
-                credits
-            });
-            totalCredits += credits;
-        }
-    }
-
-    globalData.frameworkMetadata.totalCredits = totalCredits;
-    console.log(`Framework loaded: ${globalData.frameworkCourses.length} courses, ${totalCredits} credits.`);
+    console.log(
+        `Framework loaded: ${parsedFramework.frameworkType}, ${parsedFramework.courses.length} courses, ${parsedFramework.metadata.totalCredits} credits.`
+    );
 }
+
+
 
 // Parse Student Grades workbook
 function parseWorkbook(workbook) {
-    globalData.sheets = workbook.SheetNames;
-    globalData.students = [];
-    globalData.subjectsMap = {};
-    globalData.classList = workbook.SheetNames;
+    const parsedData = parseScoreWorkbook(workbook);
 
-    workbook.SheetNames.forEach(sheetName => {
-        const sheet = workbook.Sheets[sheetName];
-        if (!sheet) return;
-
-        const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-        if (!rawData || rawData.length < 5) return;
-
-        // 1. Propagate merged cells
-        if (sheet['!merges']) {
-            sheet['!merges'].forEach(range => {
-                const startVal = rawData[range.s.r] ? rawData[range.s.r][range.s.c] : '';
-                if (startVal !== undefined && startVal !== null && String(startVal).trim() !== '') {
-                    for (let r = range.s.r; r <= range.e.r; r++) {
-                        if (!rawData[r]) rawData[r] = [];
-                        for (let c = range.s.c; c <= range.e.c; c++) {
-                            if (!rawData[r][c] || String(rawData[r][c]).trim() === '') {
-                                rawData[r][c] = startVal;
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 2. Identify Subheader and Header Rows
-        let subHeaderRowIdx = -1;
-        let maxKeywordsFound = -1;
-
-        for (let r = 0; r < Math.min(30, rawData.length); r++) {
-            const row = rawData[r] || [];
-            const rowStr = row.map(cell => normalizeText(cell)).join(' ');
-            
-            let count = 0;
-            if (rowStr.includes('TKHP') || rowStr.includes('DIEM HP') || rowStr.includes('TONG KET') || rowStr.includes('DIEM THI')) count += 3;
-            if (rowStr.includes('DIEM CHU') || rowStr.includes('CHU')) count += 2;
-            if (rowStr.includes('DANH GIA') || rowStr.includes('GHI CHU') || rowStr.includes('KET QUA')) count += 2;
-            if (rowStr.includes('STT') || rowStr.includes('MASV') || rowStr.includes('MSSV')) count += 2;
-
-            if (count > maxKeywordsFound) {
-                maxKeywordsFound = count;
-                subHeaderRowIdx = r;
-            }
-        }
-
-        if (subHeaderRowIdx === -1) subHeaderRowIdx = 10;
-
-        // 3. Detect Student Info Columns
-        let sttColIdx = 0, idColIdx = 1, hoColIdx = -1, tenColIdx = -1, nameColIdx = 4, dobColIdx = 6, emailColIdx = -1;
-
-        for (let r = Math.max(0, subHeaderRowIdx - 4); r <= Math.min(rawData.length - 1, subHeaderRowIdx + 1); r++) {
-            const row = rawData[r] || [];
-            row.forEach((cell, cIdx) => {
-                const norm = normalizeText(cell);
-                if ((norm === 'STT' || norm === 'NO' || norm === 'SO TT') && cIdx < 5) sttColIdx = cIdx;
-                else if ((norm.includes('MA SV') || norm.includes('MASV') || norm.includes('MSSV')) && cIdx < 8) idColIdx = cIdx;
-                else if ((norm.includes('HO VA DEM') || norm.includes('HO DEM') || norm === 'HO') && cIdx < 9) hoColIdx = cIdx;
-                else if ((norm === 'TEN' || norm.includes('TEN SINH VIEN')) && !norm.includes('HO') && cIdx < 9) tenColIdx = cIdx;
-                else if ((norm.includes('HO TEN') || norm.includes('HO VA TEN')) && cIdx < 10) nameColIdx = cIdx;
-                else if ((norm.includes('NGAY SINH') || norm === 'NS' || norm.includes('N.SINH')) && cIdx < 12) dobColIdx = cIdx;
-                else if (norm.includes('EMAIL') && cIdx < 12) emailColIdx = cIdx;
-            });
-        }
-
-        let lastStudentInfoCol = Math.max(sttColIdx, idColIdx, dobColIdx);
-        if (nameColIdx !== -1) lastStudentInfoCol = Math.max(lastStudentInfoCol, nameColIdx);
-        if (hoColIdx !== -1) lastStudentInfoCol = Math.max(lastStudentInfoCol, hoColIdx);
-        if (tenColIdx !== -1) lastStudentInfoCol = Math.max(lastStudentInfoCol, tenColIdx);
-        if (emailColIdx !== -1) lastStudentInfoCol = Math.max(lastStudentInfoCol, emailColIdx);
-
-        const firstSubjectCol = lastStudentInfoCol + 1;
-        const subHeaderRow = rawData[subHeaderRowIdx] || [];
-
-        // Helper to detect summary columns at end of sheet
-        const isSummaryColumn = (cIdx) => {
-            for (let r = Math.max(0, subHeaderRowIdx - 3); r <= subHeaderRowIdx; r++) {
-                const val = normalizeText(rawData[r] ? rawData[r][cIdx] : '');
-                if (val.includes('TONG SO') || val.includes('TICH LUY') || 
-                    val.includes('DIEM TRUNG BINH') || val.includes('DTB') || 
-                    val.includes('XEP LOAI') || val.includes('SO HOC PHAN HOC LAI') ||
-                    val.includes('SO HOC PHAN THI LAI') || val.includes('REN LUYEN') ||
-                    val.includes('GHI CHU TOAN KHOA')) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        // 4. Extract Subject Names & Column Mapping
-        let subjectsInSheet = [];
-        let maxCols = 0;
-        for (let r = 0; r < Math.min(subHeaderRowIdx + 5, rawData.length); r++) {
-            if (rawData[r] && rawData[r].length > maxCols) maxCols = rawData[r].length;
-        }
-
-        let currentSubjectName = "";
-
-        for (let c = firstSubjectCol; c < maxCols; c++) {
-            if (isSummaryColumn(c)) break;
-
-            let rawSubjName = "";
-            for (let r = subHeaderRowIdx - 1; r >= 0; r--) {
-                const val = String(rawData[r] ? rawData[r][c] || '' : '').trim();
-                const normVal = normalizeText(val);
-                if (val !== '' && !normVal.includes('STT') && !normVal.includes('MSSV') && !normVal.includes('BANG DIEM') && !normVal.includes('KHOA') && normVal.length > 2) {
-                    rawSubjName = val.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
-                    break;
-                }
-            }
-
-            let rawSubHeader = normalizeText(subHeaderRow[c] || '');
-
-            if (rawSubjName !== "") {
-                currentSubjectName = rawSubjName;
-            }
-
-            if (currentSubjectName) {
-                let existingSubj = subjectsInSheet.find(s => s.name === currentSubjectName && s.endCol === c - 1);
-                if (existingSubj) {
-                    existingSubj.endCol = c;
-                    existingSubj.cols.push({ colIdx: c, subHeader: rawSubHeader });
-                } else {
-                    subjectsInSheet.push({
-                        name: currentSubjectName,
-                        startCol: c,
-                        endCol: c,
-                        cols: [{ colIdx: c, subHeader: rawSubHeader }]
-                    });
-                }
-            }
-        }
-
-        // Map sub-columns for each subject
-        subjectsInSheet.forEach(s => {
-            s.colTKHP = -1;
-            s.colDiemChu = -1;
-            s.colDanhGia = -1;
-
-            s.cols.forEach(colObj => {
-                const sub = colObj.subHeader;
-                if (sub.includes('TKHP') || sub.includes('DIEM HP') || sub.includes('TONG KET') || sub.includes('THANG 10') || sub.includes('DIEM THI') || sub.includes('DIEM TKN')) {
-                    if (s.colTKHP === -1) s.colTKHP = colObj.colIdx;
-                }
-                else if (sub.includes('DIEM CHU') || sub.includes('CHU')) {
-                    if (s.colDiemChu === -1) s.colDiemChu = colObj.colIdx;
-                }
-                else if (sub.includes('DANH GIA') || sub.includes('GHI CHU') || sub.includes('TRANG THAI') || sub.includes('KET QUA') || sub.includes('DAT/KD') || sub.includes('DAT')) {
-                    if (s.colDanhGia === -1) s.colDanhGia = colObj.colIdx;
-                }
-            });
-
-            if (s.colTKHP === -1 && s.cols.length > 0) s.colTKHP = s.cols[0].colIdx;
-            if (s.colDiemChu === -1 && s.cols.length > 1) s.colDiemChu = s.cols[1].colIdx;
-            if (s.colDanhGia === -1 && s.cols.length > 2) s.colDanhGia = s.cols[2].colIdx;
-
-            if (!globalData.subjectsMap[s.name]) {
-                globalData.subjectsMap[s.name] = {
-                    name: s.name,
-                    totalDebts: 0,
-                    debtStudents: []
-                };
-            }
-        });
-
-        // 5. Evaluate Student Rows (Mapping ALL course grades for framework matching)
-        for (let r = subHeaderRowIdx + 1; r < rawData.length; r++) {
-            const row = rawData[r];
-            if (!row || row.length === 0) continue;
-
-            const sttVal = String(row[sttColIdx] || '').trim();
-            const id = String(row[idColIdx] || '').trim();
-            
-            let fullName = '';
-            if (hoColIdx !== -1 && tenColIdx !== -1) {
-                const ho = String(row[hoColIdx] || '').trim();
-                const ten = String(row[tenColIdx] || '').trim();
-                fullName = (ho + ' ' + ten).trim();
-            } else if (nameColIdx !== -1) {
-                fullName = String(row[nameColIdx] || '').trim();
-            }
-
-            const dob = dobColIdx !== -1 ? String(row[dobColIdx] || '').trim() : '';
-            let email = emailColIdx !== -1 ? String(row[emailColIdx] || '').trim() : '';
-
-            if (!email && id.length >= 6 && !isNaN(Number(id))) {
-                email = `${id}@st.phenikaa-uni.edu.vn`;
-            }
-
-            const parsedStt = parseInt(sttVal, 10);
-            const isSttNumber = !isNaN(parsedStt) && parsedStt > 0 && String(sttVal).toLowerCase().indexOf('tín chỉ') === -1;
-            const isIdValid = id.length >= 6 && !id.toUpperCase().includes('MSSV') && !id.toUpperCase().includes('MÃ');
-
-            if (isSttNumber && isIdValid) {
-                let studentDebts = [];
-                let coursesTaken = {}; // Store grades of ALL studied subjects
-
-                subjectsInSheet.forEach(subj => {
-                    // Extract code from subject name: e.g. "Giải tích 2 - FFS703064" -> "FFS703064"
-                    const parts = subj.name.split(' - ');
-                    const courseCode = parts.length > 1 ? parts[parts.length - 1].trim() : subj.name;
-
-                    const rawTkhp = subj.colTKHP !== -1 ? row[subj.colTKHP] : null;
-                    const rawDiemChu = subj.colDiemChu !== -1 ? row[subj.colDiemChu] : null;
-                    const rawDanhGia = subj.colDanhGia !== -1 ? row[subj.colDanhGia] : null;
-
-                    // Skip empty columns completely (not taken)
-                    if ((rawTkhp === null || rawTkhp === '') && 
-                        (rawDiemChu === null || rawDiemChu === '') && 
-                        (rawDanhGia === null || rawDanhGia === '')) {
-                        return;
-                    }
-
-                    const latestTkhpStr = getLatestAttempt(rawTkhp);
-                    const latestDiemChuStr = getLatestAttempt(rawDiemChu);
-                    const latestDanhGiaStr = getLatestAttempt(rawDanhGia);
-
-                    const normDanhGia = normalizeText(latestDanhGiaStr);
-                    const normDiemChu = normalizeText(latestDiemChuStr);
-
-                    let isDebt = false;
-                    let reason = '';
-
-                    const isExplicitPass = normDiemChu === 'P' || normDiemChu === 'M' || normDiemChu === 'DAT' || 
-                                           normDiemChu === 'PASS' || normDanhGia === 'DAT' || normDanhGia === 'PASS' || 
-                                           normDanhGia === 'MIEN' || normDanhGia === 'HOAN' ||
-                                           ['A', 'A+', 'B+', 'B', 'C+', 'C', 'D+', 'D'].includes(normDiemChu);
-
-                    if (!isExplicitPass) {
-                        if (normDanhGia.includes('HOC LAI') || normDanhGia.includes('THI LAI') || 
-                            normDanhGia.includes('KHONG DAT') || normDanhGia.includes('HOCLAI') || 
-                            normDanhGia.includes('THILAI') || normDanhGia.includes('KDAT') || 
-                            normDanhGia.includes('TRUOT') || normDanhGia.includes('CAM THI') ||
-                            normDanhGia.includes('VANG THI') || normDanhGia === 'NO' || 
-                            normDanhGia === 'FAIL' || normDanhGia === 'KD' || normDanhGia === 'VT' || normDanhGia === 'CT') {
-                            isDebt = true;
-                            reason = String(rawDanhGia || 'Chưa đạt / Học lại');
-                        } 
-                        else if (normDiemChu === 'F' || normDiemChu.startsWith('F(') || normDiemChu === 'F*' || normDiemChu === 'F+' || normDiemChu === 'KD' || normDiemChu === 'VT' || normDiemChu === 'CT') {
-                            isDebt = true;
-                            reason = `Điểm F`;
-                        } 
-                        else if (latestTkhpStr !== '' && !isNaN(Number(latestTkhpStr))) {
-                            const numTkhp = Number(latestTkhpStr);
-                            if (numTkhp >= 0 && numTkhp < 4.0) {
-                                isDebt = true;
-                                reason = `TKHP: ${latestTkhpStr} (< 4.0)`;
-                            }
-                        }
-                    }
-
-                    // Save studied status in map
-                    coursesTaken[courseCode] = {
-                        passed: !isDebt,
-                        tkhp: latestTkhpStr,
-                        diemChu: latestDiemChuStr,
-                        danhGia: latestDanhGiaStr
-                    };
-
-                    if (isDebt) {
-                        studentDebts.push({
-                            subjectName: subj.name,
-                            tkhp: rawTkhp,
-                            diemChu: rawDiemChu,
-                            danhGia: rawDanhGia,
-                            reason: reason
-                        });
-
-                        globalData.subjectsMap[subj.name].totalDebts++;
-                        globalData.subjectsMap[subj.name].debtStudents.push({
-                            id: id,
-                            name: fullName || 'Chưa rõ tên',
-                            className: sheetName,
-                            reason: reason,
-                            tkhp: rawTkhp,
-                            diemChu: rawDiemChu
-                        });
-                    }
-                });
-
-                globalData.students.push({
-                    stt: parsedStt,
-                    id: id,
-                    name: fullName || 'Chưa rõ tên',
-                    dob: dob,
-                    email: email,
-                    className: sheetName,
-                    debts: studentDebts,
-                    coursesTaken: coursesTaken,
-                    studyPlan: {} // Future semesters study plan { [courseCode]: semesterName }
-                });
-            }
-        }
-    });
+    globalData.sheets = parsedData.sheets;
+    globalData.students = parsedData.students;
+    globalData.subjectsMap = parsedData.subjectsMap;
+    globalData.classList = parsedData.classList;
 
     populateFilters();
-    renderDashboard();
 }
+
+
 
 function loadDemoData() {
     // 1. Mock curricular framework
@@ -882,21 +509,21 @@ function renderOverviewTab() {
     document.getElementById('kpiDebtRatio').innerText = `${ratioPercent}% tổng số SV`;
 
     document.getElementById('kpiTotalSubjects').innerText = totalSubjects;
-    document.getElementById('kpiSubjectsWithDebt').innerText = `${subjectsWithDebt} môn có SV nợ`;
+    document.getElementById('kpiSubjectsWithDebt').innerText = globalData.frameworkCourses.length > 0
+        ? `Khung: ${globalData.frameworkCourses.length} môn / ${globalData.frameworkMetadata.totalCredits} TC • ${subjectsWithDebt} môn có SV nợ`
+        : `${subjectsWithDebt} môn có SV nợ`;
 
     document.getElementById('kpiTotalDebts').innerText = totalDebtsCount;
     document.getElementById('kpiAvgDebts').innerText = `TB ${avgDebts} môn / SV nợ`;
 
     const classListContainer = document.getElementById('classListContainer');
-    classListContainer.innerHTML = '';
-
-    globalData.classList.forEach(cls => {
+    classListContainer.innerHTML = globalData.classList.map(cls => {
         const studentsInClass = globalData.students.filter(s => s.className === cls);
         const debtInClass = studentsInClass.filter(s => s.debts.length > 0);
         const classRatio = studentsInClass.length > 0 ? ((debtInClass.length / studentsInClass.length) * 100).toFixed(1) : 0;
         const totalClassDebts = studentsInClass.reduce((a, b) => a + b.debts.length, 0);
 
-        classListContainer.innerHTML += `
+        return `
             <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
                 <div>
                     <div class="font-bold text-slate-800 text-sm">${cls}</div>
@@ -908,7 +535,7 @@ function renderOverviewTab() {
                 </div>
             </div>
         `;
-    });
+    }).join('');
 
     renderChart();
 }
@@ -976,7 +603,6 @@ function renderStudentsTab() {
     const debtFilter = document.getElementById('debtFilterSelect').value;
 
     const container = document.getElementById('studentsListContainer');
-    container.innerHTML = '';
 
     let filteredStudents = globalData.students.filter(s => {
         const matchClass = classFilter === 'ALL' || s.className === classFilter;
@@ -1001,7 +627,7 @@ function renderStudentsTab() {
 
     const hasFramework = globalData.frameworkCourses.length > 0;
 
-    filteredStudents.forEach((st, idx) => {
+    container.innerHTML = filteredStudents.map((st, idx) => {
         const hasDebt = st.debts.length > 0;
         const statusBadge = hasDebt 
             ? `<span class="px-3 py-1 rounded-full bg-rose-100 text-rose-700 font-bold text-xs"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Nợ ${st.debts.length} môn</span>`
@@ -1024,7 +650,7 @@ function renderStudentsTab() {
             `).join('');
         }
 
-        container.innerHTML += `
+        return `
             <div class="bg-white rounded-3xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
                 <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div class="flex items-center gap-4">
@@ -1068,7 +694,7 @@ function renderStudentsTab() {
                 ` : ''}
             </div>
         `;
-    });
+    }).join('');
 }
 
 function toggleAccordion(id) {
@@ -1081,8 +707,6 @@ function renderSubjectsTab() {
 
     const searchQuery = normalizeText(document.getElementById('subjectSearchInput').value);
     const container = document.getElementById('subjectsGridContainer');
-    container.innerHTML = '';
-
     const subjectKeys = Object.keys(globalData.subjectsMap);
     const filteredKeys = subjectKeys.filter(k => normalizeText(k).includes(searchQuery));
 
@@ -1098,11 +722,11 @@ function renderSubjectsTab() {
         return;
     }
 
-    filteredKeys.forEach(key => {
+    container.innerHTML = filteredKeys.map(key => {
         const subj = globalData.subjectsMap[key];
         const hasDebts = subj.totalDebts > 0;
 
-        container.innerHTML += `
+        return `
             <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div>
                     <div class="flex items-start justify-between gap-2 mb-3">
@@ -1117,6 +741,7 @@ function renderSubjectsTab() {
                     <span class="text-xs text-slate-500">${hasDebts ? 'Cần tổ chức thi/học lại' : 'Tất cả SV đã đạt'}</span>
                     <div class="flex items-center gap-2">
                         ${hasDebts ? `
+                            <button onclick="exportSubjectStudentsToExcel('${encodeURIComponent(subj.name)}')" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl transition-colors" title="Xuất Excel danh sách sinh viên môn này"><i class="fa-solid fa-file-excel"></i></button>
                             <button onclick="openSendModal(null, '${encodeURIComponent(subj.name)}')" class="text-xs font-semibold text-sky-600 hover:text-sky-800 bg-sky-50 px-3 py-1.5 rounded-xl transition-colors" title="Gửi thông báo cho SV nợ môn này"><i class="fa-solid fa-paper-plane"></i></button>
                             <button onclick="openSubjectModal('${encodeURIComponent(subj.name)}')" class="text-xs font-bold text-brand-700 hover:text-brand-800 bg-brand-50 px-3 py-1.5 rounded-xl transition-colors">
                                 Xem danh sách SV <i class="fa-solid fa-arrow-right ml-1"></i>
@@ -1126,7 +751,21 @@ function renderSubjectsTab() {
                 </div>
             </div>
         `;
-    });
+    }).join('');
+}
+
+function exportSubjectStudentsToExcel(encodedName) {
+    const subjectName = decodeURIComponent(encodedName);
+    const subject = globalData.subjectsMap[subjectName];
+    const report = buildSubjectStudentsReport(subjectName, subject, globalData.students);
+    if (!report) {
+        showCustomMessage('Môn học này không có sinh viên đang nợ để xuất.', 'info');
+        return;
+    }
+
+    downloadReportWorkbook(report.filename, [report]);
+
+    showCustomMessage(`Đã xuất danh sách ${report.rows.length} sinh viên nợ ${report.courseCode || subjectName.split(' - ').pop().trim()}.`, 'success');
 }
 
 function openSubjectModal(encodedName) {
@@ -1138,10 +777,8 @@ function openSubjectModal(encodedName) {
     document.getElementById('modalSubjectSubtitle').innerText = `Tổng cộng: ${subj.totalDebts} sinh viên đang nợ môn này`;
 
     const modalList = document.getElementById('modalStudentList');
-    modalList.innerHTML = '';
-
-    subj.debtStudents.forEach((st, i) => {
-        modalList.innerHTML += `
+    modalList.innerHTML = subj.debtStudents.map((st, i) => {
+        return `
             <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">
                 <div>
                     <div class="font-bold text-slate-800">${i + 1}. ${st.name}</div>
@@ -1152,7 +789,7 @@ function openSubjectModal(encodedName) {
                 </div>
             </div>
         `;
-    });
+    }).join('');
 
     document.getElementById('subjectDetailModal').classList.remove('hidden');
 }
@@ -1172,6 +809,14 @@ const SEMESTER_PLANNING_OPTIONS = [
 // GRADUATION PLANNERS & SEMESTER PLANNING FUNCTIONS
 // -------------------------------------------------------------
 
+function buildPlannerAssessment(student) {
+    return analyzeStudentAgainstFramework(
+        student,
+        globalData.frameworkCourses || [],
+        globalData.frameworkMetadata || {}
+    );
+}
+
 function openPlannerModal(studentId) {
     const student = globalData.students.find(s => s.id === studentId);
     if (!student) return;
@@ -1180,91 +825,38 @@ function openPlannerModal(studentId) {
 
     // Set header details
     document.getElementById('plannerModalStudentInfo').innerHTML = `
-        Sinh viên: <span class="font-bold text-white text-sm">${student.name}</span> • 
-        MSSV: <span class="font-bold text-white">${student.id}</span> • 
+        Sinh viên: <span class="font-bold text-white text-sm">${student.name}</span> •
+        MSSV: <span class="font-bold text-white">${student.id}</span> •
         Lớp: <span class="font-bold text-white">${student.className}</span>
     `;
 
-    // Process & calculate stats
-    const frameworkCourses = globalData.frameworkCourses;
-    const coursesTaken = student.coursesTaken || {};
-
-    let passedCredits = 0;
-    let failedCredits = 0;
-    let unstudiedCredits = 0;
-
-    let passedCount = 0;
-    let failedCount = 0;
-    let unstudiedCount = 0;
-
-    // Group framework courses by block
-    let roadmapGroups = {};
-
-    frameworkCourses.forEach(course => {
-        const code = course.courseCode;
-        const takenInfo = coursesTaken[code];
-        
-        let status = 'UNSTUDIED'; // PASSED, DEBT, UNSTUDIED
-        let gradeDesc = '-';
-
-        if (takenInfo) {
-            if (takenInfo.passed) {
-                status = 'PASSED';
-                passedCredits += course.credits;
-                passedCount++;
-                gradeDesc = `${takenInfo.tkhp || ''} (${takenInfo.diemChu || ''})`;
-            } else {
-                status = 'DEBT';
-                failedCredits += course.credits;
-                failedCount++;
-                gradeDesc = `${takenInfo.tkhp || ''} (${takenInfo.diemChu || 'F'}) - Nợ`;
-            }
-        } else {
-            status = 'UNSTUDIED';
-            unstudiedCredits += course.credits;
-            unstudiedCount++;
-        }
-
-        // Initialize block array
-        if (!roadmapGroups[course.blockId]) {
-            roadmapGroups[course.blockId] = {
-                name: course.blockName,
-                courses: []
-            };
-        }
-
-        roadmapGroups[course.blockId].courses.push({
-            ...course,
-            status,
-            gradeDesc
-        });
-    });
-
+    // Calculate planner status using required courses and elective groups.
+    const assessment = buildPlannerAssessment(student);
     const totalFrameworkCredits = globalData.frameworkMetadata.totalCredits || 1;
-    const progressPercent = Math.min(100, ((passedCredits / totalFrameworkCredits) * 100)).toFixed(1);
+    const progressPercent = Math.min(100, ((assessment.passedCredits / totalFrameworkCredits) * 100)).toFixed(1);
 
-    // Render KPIs
-    document.getElementById('plannerProgressPercent').innerText = `${progressPercent}% (${passedCredits}/${totalFrameworkCredits} TC)`;
+    document.getElementById('plannerProgressPercent').innerText = `${progressPercent}% (${assessment.passedCredits}/${totalFrameworkCredits} TC)`;
     document.getElementById('plannerProgressBar').style.width = `${progressPercent}%`;
-    document.getElementById('plannerPassedCount').innerText = passedCount;
-    document.getElementById('plannerFailedCount').innerText = failedCount;
-    document.getElementById('plannerUnstudiedCount').innerText = unstudiedCount;
+    document.getElementById('plannerPassedCount').innerText = assessment.passedCount;
+    document.getElementById('plannerFailedCount').innerText = assessment.failedCount;
+    document.getElementById('plannerUnstudiedCount').innerText = assessment.unstudiedCount;
 
-    // Save calculations on student object for printing
+    student.plannerAssessment = assessment;
     student.stats = {
-        passedCredits,
+        passedCredits: assessment.passedCredits,
+        failedCredits: assessment.failedCredits,
+        unstudiedCredits: assessment.unstudiedCredits,
         totalFrameworkCredits,
         progressPercent,
-        passedCount,
-        failedCount,
-        unstudiedCount
+        passedCount: assessment.passedCount,
+        failedCount: assessment.failedCount,
+        unstudiedCount: assessment.unstudiedCount
     };
 
-    // Render Tab 1: Roadmap matching
-    renderRoadmapTab(roadmapGroups);
-
-    // Render Tab 2: Study planner
+    renderRoadmapTab(assessment.roadmapGroups);
     renderPlannerTab();
+
+
 
     // Reset default active tab
     switchPlannerTab('roadmap');
@@ -1317,6 +909,12 @@ function renderRoadmapTab(roadmapGroups) {
             } else if (c.status === 'DEBT') {
                 statusBadge = '<span class="px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-md"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Đang nợ</span>';
                 rowBg = 'bg-rose-50/20';
+            } else if (c.status === 'EXCESS') {
+                statusBadge = '<span class="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-md"><i class="fa-solid fa-circle-info mr-1"></i>Da hoc vuot</span>';
+                rowBg = 'bg-amber-50/30';
+            } else if (c.status === 'NOT_REQUIRED') {
+                statusBadge = '<span class="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md"><i class="fa-solid fa-minus mr-1"></i>Khong tinh</span>';
+                rowBg = 'bg-slate-50/50';
             } else {
                 statusBadge = '<span class="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-semibold rounded-md"><i class="fa-solid fa-circle-minus mr-1"></i>Chưa học</span>';
                 rowBg = 'bg-white';
@@ -1333,11 +931,19 @@ function renderRoadmapTab(roadmapGroups) {
             `;
         }).join('');
 
+        const electiveSummary = block.electiveSummary;
+        const summaryHtml = electiveSummary
+            ? `<span class="ml-2 px-2 py-1 rounded-lg bg-brand-50 text-brand-700 text-[10px] font-bold">${electiveSummary.earnedCredits}/${electiveSummary.requiredCredits} TC tu chon</span>`
+            : '';
+        if (block.courses.length === 0) {
+            rowsHtml = `<tr><td colspan="5" class="py-5 px-3 text-center text-slate-400 italic">Nhom nay con ${electiveSummary?.remainingCredits || 0} TC; khung chua liet ke hoc phan cu the.</td></tr>`;
+        }
+
         container.innerHTML += `
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
                 <h4 class="font-extrabold text-slate-800 text-sm mb-3 flex items-center gap-2">
                     <span class="w-2.5 h-4 bg-brand-700 rounded-sm"></span>
-                    ${blockId} - ${block.name}
+                    ${blockId} - ${block.name} ${summaryHtml}
                 </h4>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-xs border-collapse">
@@ -1366,16 +972,24 @@ function renderPlannerTab() {
     const container = document.getElementById('plannerTabContent-planner');
     container.innerHTML = '';
 
-    const frameworkCourses = globalData.frameworkCourses;
-    const coursesTaken = student.coursesTaken || {};
-
-    // Filter remaining courses: either debted or never taken
-    let remainingCourses = frameworkCourses.filter(c => {
-        const taken = coursesTaken[c.courseCode];
-        return !taken || !taken.passed;
-    });
+    const assessment = student.plannerAssessment || buildPlannerAssessment(student);
+    const remainingCourses = assessment.remainingCourses;
+    const groupsWithoutOptions = assessment.electiveGroups.filter(group =>
+        group.remainingCredits > 0 && group.options.length === 0
+    );
 
     if (remainingCourses.length === 0) {
+        if (groupsWithoutOptions.length > 0) {
+            container.innerHTML = `
+                <div class="text-center py-10 bg-amber-50 rounded-3xl border border-amber-200">
+                    <i class="fa-solid fa-circle-info text-4xl text-amber-500 mb-3"></i>
+                    <h4 class="font-bold text-slate-800 text-lg">Con nhom tin chi chua co danh sach mon cu the</h4>
+                    <p class="text-slate-600 text-xs mt-2">Khung chuong trinh con ${groupsWithoutOptions.reduce((sum, group) => sum + group.remainingCredits, 0)} TC tu chon, nhung file khung khong liet ke ma hoc phan de chon.</p>
+                </div>
+            `;
+            return;
+        }
+
         container.innerHTML = `
             <div class="text-center py-12 bg-white rounded-3xl border border-slate-200">
                 <i class="fa-solid fa-graduation-cap text-4xl text-emerald-500 mb-3"></i>
@@ -1386,12 +1000,17 @@ function renderPlannerTab() {
         return;
     }
 
+    const manualElectiveNoticeHtml = groupsWithoutOptions.length > 0
+        ? `<div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800"><i class="fa-solid fa-circle-info mr-1"></i>Con ${groupsWithoutOptions.reduce((sum, group) => sum + group.remainingCredits, 0)} TC tu chon chua co danh sach mon cu the trong khung.</div>`
+        : '';
+
     // Grid of planning interface: Left column is selector, Right column is visual semesters
     container.innerHTML = `
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <!-- Left panel: courses selector -->
             <div class="lg:col-span-3 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
                 <h4 class="font-extrabold text-slate-800 text-sm border-b pb-2"><i class="fa-solid fa-list-ul mr-1.5 text-phenikaa-orange"></i>Phân Bổ Học Phần Còn Thiếu</h4>
+                ${manualElectiveNoticeHtml}
                 <div class="space-y-3 custom-scrollbar overflow-y-auto max-h-96 pr-1" id="plannerSelectorsList">
                     <!-- Dynamic select lists -->
                 </div>
@@ -1409,7 +1028,10 @@ function renderPlannerTab() {
     
     remainingCourses.forEach(c => {
         const currentSemester = student.studyPlan[c.courseCode] || '';
-        const isDebt = coursesTaken[c.courseCode] && !coursesTaken[c.courseCode].passed;
+        const isDebt = c.status === 'DEBT';
+        const courseTypeLabel = c.courseType === 'elective'
+            ? `<span class="text-brand-700 font-bold">Tu chon ${c.electiveGroup || ''}</span>`
+            : '<span class="text-slate-500 font-medium">Bat buoc</span>';
 
         const selectHtml = `
             <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-4">
@@ -1420,7 +1042,7 @@ function renderPlannerTab() {
                     </div>
                     <div class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
                         <span>Code: ${c.courseCode}</span> • 
-                        ${isDebt 
+                        ${courseTypeLabel} · ${isDebt
                             ? '<span class="text-rose-600 font-bold"><i class="fa-solid fa-triangle-exclamation mr-0.5"></i>Nợ F</span>' 
                             : '<span class="text-slate-500 font-medium">Chưa học</span>'}
                     </div>
@@ -1795,42 +1417,32 @@ async function logNotification() {
     closeSendModal();
 }
 
+function downloadReportWorkbook(filename, sheets) {
+    const workbook = XLSX.utils.book_new();
+    sheets.forEach(sheet => {
+        const worksheet = XLSX.utils.json_to_sheet(sheet.rows);
+        if (sheet.widths) {
+            worksheet['!cols'] = sheet.widths.map(wch => ({ wch }));
+        }
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheet.sheetName || sheet.name);
+    });
+    XLSX.writeFile(workbook, filename);
+}
+
 function exportToExcel() {
     if (!globalData.students || globalData.students.length === 0) {
         showCustomMessage("Chưa có dữ liệu để xuất file!", "error");
         return;
     }
 
-    let exportRows = [];
-    globalData.students.forEach(st => {
-        if (st.debts.length > 0) {
-            st.debts.forEach(d => {
-                exportRows.push({
-                    "Lớp / Sheet": st.className,
-                    "Mã Số Sinh Viên": st.id,
-                    "Họ Và Tên": st.name,
-                    "Ngày Sinh": st.dob,
-                    "Email": st.email,
-                    "Môn Học Nợ": d.subjectName,
-                    "Lịch Sử TKHP": d.tkhp !== null && d.tkhp !== undefined ? d.tkhp : '',
-                    "Lịch Sử Điểm Chữ": d.diemChu || '',
-                    "Lịch Sử Đánh Giá": d.danhGia || '',
-                    "Lý Do Nợ Hiện Tại": d.reason
-                });
-            });
-        }
-    });
+    const report = buildDebtReport(globalData.students);
 
-    if (exportRows.length === 0) {
+    if (report.rows.length === 0) {
         showCustomMessage("Tất cả sinh viên đều đã đạt/sạch nợ, không có dữ liệu nợ để xuất!");
         return;
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "ThongKeNoMon");
-
-    XLSX.writeFile(workbook, "Bao_Cao_Danh_Sach_No_Mon_Sinh_Vien.xlsx");
+    downloadReportWorkbook(report.filename, [{ ...report, name: report.sheetName }]);
     showCustomMessage("Đã xuất file báo cáo Excel thành công!");
 }
 
@@ -1840,47 +1452,36 @@ function exportSummaryToExcel() {
         return;
     }
 
-    let exportRows = [];
-    const studentsWithDebt = globalData.students.filter(st => st.debts.length > 0);
-
-    if (studentsWithDebt.length === 0) {
+    const report = buildDebtSummaryReport(globalData.students);
+    if (report.rows.length === 0) {
         showCustomMessage("Tất cả sinh viên đều đã đạt/sạch nợ, không có dữ liệu tổng hợp để xuất!");
         return;
     }
 
-    studentsWithDebt.forEach(st => {
-        const debtSubjectsList = st.debts.map(d => `- ${d.subjectName} (Lý do: ${d.reason})`).join('\n');
-        
-        const emailSubject = `[Thông báo] V/v kết quả học tập và các môn cần xử lý của sinh viên ${st.name}`;
-        const emailBody = `Chào em ${st.name},\n\nKhoa Công nghệ thông tin thông báo về tình hình học tập của em.\nHiện tại, hệ thống ghi nhận em đang có ${st.debts.length} môn học chưa đạt, cần phải xử lý, cụ thể:\n\n${debtSubjectsList}\n\nĐề nghị em theo dõi lịch của phòng Đào tạo và các thông báo của Khoa để đăng ký học lại/thi lại các học phần trên trong thời gian sớm nhất.\n\nTrân trọng,\nKhoa Công nghệ thông tin.`;
-
-        exportRows.push({
-            "Lớp / Sheet": st.className,
-            "Mã Số Sinh Viên": st.id,
-            "Họ Và Tên": st.name,
-            "Email": st.email,
-            "Tiêu đề Email": emailSubject,
-            "Nội dung Email": emailBody
-        });
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "TongHopNoMon");
-
-    // Set column widths for better readability
-    const colWidths = [
-        { wch: 15 }, // Lớp / Sheet
-        { wch: 15 }, // Mã Số Sinh Viên
-        { wch: 25 }, // Họ Và Tên
-        { wch: 30 }, // Email
-        { wch: 50 }, // Tiêu đề Email
-        { wch: 80 }  // Nội dung Email
-    ];
-    worksheet['!cols'] = colWidths;
-
-    XLSX.writeFile(workbook, "Bao_Cao_Tong_Hop_No_Mon_Sinh_Vien.xlsx");
+    downloadReportWorkbook(report.filename, [{ ...report, name: report.sheetName }]);
     showCustomMessage("Đã xuất file báo cáo tổng hợp Excel thành công!");
+}
+
+function exportClassOpeningReport() {
+    if (!globalData.students || globalData.students.length === 0) {
+        showCustomMessage("Chưa có dữ liệu sinh viên để xuất!", "error");
+        return;
+    }
+
+    if (!globalData.frameworkCourses || globalData.frameworkCourses.length === 0) {
+        showCustomMessage("Vui lòng tải lên khung chương trình trước khi xuất nhu cầu mở lớp.", "error");
+        return;
+    }
+
+    const report = analyzeFrameworkDemand(
+        globalData.students,
+        globalData.frameworkCourses,
+        globalData.frameworkMetadata || {}
+    );
+
+    const sheets = buildClassOpeningReportSheets(report, globalData.frameworkCourses);
+    downloadReportWorkbook("Bao_Cao_Nhu_Cau_Mo_Lop_Theo_Khung.xlsx", sheets);
+    showCustomMessage("Đã xuất báo cáo nhu cầu mở lớp theo khung chương trình!", "success");
 }
 
 async function renderLogsTab() {
