@@ -10,7 +10,8 @@ function emptyFrameworkResult(frameworkType) {
             totalCredits: 0,
             listedCredits: 0,
             electiveGroups: [],
-            frameworkType
+            frameworkType,
+            sourceSheet: ''
         }
     };
 }
@@ -276,16 +277,35 @@ function parseBm2Framework(rawData) {
 }
 
 export function parseFrameworkWorkbook(workbook) {
-    const sheetName = workbook?.SheetNames?.[0];
-    const sheet = sheetName ? workbook.Sheets[sheetName] : null;
-    if (!sheet) return emptyFrameworkResult('UNKNOWN');
+    const sheetNames = Array.isArray(workbook?.SheetNames) ? workbook.SheetNames : [];
+    const candidates = sheetNames
+        .map(sheetName => {
+            const sheet = workbook.Sheets?.[sheetName];
+            if (!sheet) return null;
 
-    const rawData = sheetToMatrix(sheet);
-    if (!rawData || rawData.length < 2) return emptyFrameworkResult('UNKNOWN');
+            const rawData = sheetToMatrix(sheet);
+            if (!rawData || rawData.length < 2) return null;
 
-    const frameworkType = detectFrameworkType(rawData);
-    if (frameworkType === 'BM2') return parseBm2Framework(rawData);
-    if (frameworkType === 'LEGACY_QLDT') return parseLegacyFramework(rawData);
+            const frameworkType = detectFrameworkType(rawData);
+            let parsed;
+            if (frameworkType === 'BM2') parsed = parseBm2Framework(rawData);
+            else if (frameworkType === 'LEGACY_QLDT') parsed = parseLegacyFramework(rawData);
+            else return null;
 
-    return emptyFrameworkResult('UNKNOWN');
+            return {
+                ...parsed,
+                metadata: {
+                    ...parsed.metadata,
+                    sourceSheet: sheetName
+                }
+            };
+        })
+        .filter(Boolean);
+
+    if (candidates.length === 0) return emptyFrameworkResult('UNKNOWN');
+
+    return candidates.sort((first, second) =>
+        second.courses.length - first.courses.length ||
+        second.metadata.totalCredits - first.metadata.totalCredits
+    )[0];
 }
