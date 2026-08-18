@@ -64,7 +64,7 @@ export function buildDebtSummaryReport(students = []) {
             .join('\n');
 
         const emailSubject = `[Thông báo] V/v kết quả học tập và các môn cần xử lý của sinh viên ${student.name}`;
-        const emailBody = `Chào em ${student.name},\n\nKhoa Công nghệ thông tin thông báo về tình hình học tập của em.\nHiện tại, hệ thống ghi nhận em đang có ${student.debts.length} môn học chưa đạt, cần phải xử lý, cụ thể:\n\n${debtSubjectsList}\n\nĐề nghị em theo dõi lịch của phòng Đào tạo và các thông báo của Khoa để đăng ký học lại/thi lại các học phần trên trong thời gian sớm nhất.\n\nTrân trọng,\nKhoa Công nghệ thông tin.`;
+        const emailBody = `Chào em ${student.name},\n\nTrường Công nghệ thông tin thông báo về tình hình học tập của em.\nHiện tại, hệ thống ghi nhận em đang có ${student.debts.length} môn học chưa đạt, cần phải xử lý, cụ thể:\n\n${debtSubjectsList}\n\nĐề nghị em theo dõi lịch của phòng Đào tạo và các thông báo của Trường để đăng ký học lại/thi lại các học phần trên trong thời gian sớm nhất.\n\nTrân trọng,\nTrường Công nghệ thông tin.`;
 
         return {
             'Lớp / Sheet': student.className,
