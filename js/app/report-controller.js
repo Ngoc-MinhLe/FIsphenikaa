@@ -10,6 +10,7 @@ function getFacultyDetailKind(detail) {
     const type = String(detail.courseType || '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[Đđ]/g, 'd')
         .toLocaleLowerCase('vi');
     if (type.includes('bat buoc')) return 'mandatory';
     if (type.includes('dieu kien')) return 'condition';
@@ -32,6 +33,19 @@ function getElectiveMissingCredits(student) {
     );
 }
 
+function getFacultyCreditBreakdown(student) {
+    const electiveCredits = getElectiveMissingCredits(student);
+    const totalProgramCredits = Number(student.missingCredits || 0);
+    const otherCredits = (student.missingCourseDetails || [])
+        .filter(detail => getFacultyDetailKind(detail) === 'condition')
+        .reduce((sum, detail) => sum + Number(detail.credits || 0), 0);
+    return {
+        mandatoryCredits: Math.max(0, totalProgramCredits - electiveCredits),
+        electiveCredits,
+        otherCredits
+    };
+}
+
 function buildFacultyExportSummary(records) {
     const groups = new Map();
     records.forEach(student => {
@@ -44,7 +58,10 @@ function buildFacultyExportSummary(records) {
                 yellow: 0,
                 red: 0,
                 averageMissingCredits: 0,
-                averageMissingCourses: 0
+                averageMissingCourses: 0,
+                averageMandatoryCredits: 0,
+                averageElectiveCredits: 0,
+                averageOtherCredits: 0
             });
         }
         const item = groups.get(key);
@@ -52,6 +69,10 @@ function buildFacultyExportSummary(records) {
         item[student.group] += 1;
         item.averageMissingCredits += Number(student.missingCredits || 0);
         item.averageMissingCourses += Number(student.missingCourses || 0);
+        const breakdown = getFacultyCreditBreakdown(student);
+        item.averageMandatoryCredits += breakdown.mandatoryCredits;
+        item.averageElectiveCredits += breakdown.electiveCredits;
+        item.averageOtherCredits += breakdown.otherCredits;
     });
     return [...groups.values()].map(item => ({
         'Khoa / đơn vị': item.faculty,
@@ -60,7 +81,10 @@ function buildFacultyExportSummary(records) {
         'Nhóm Vàng': item.yellow,
         'Nhóm Đỏ': item.red,
         'TB TC còn thiếu': Number((item.averageMissingCredits / item.total).toFixed(1)),
-        'TB HP còn thiếu': Number((item.averageMissingCourses / item.total).toFixed(1))
+        'TB HP còn thiếu': Number((item.averageMissingCourses / item.total).toFixed(1)),
+        'TB TC bắt buộc thiếu': Number((item.averageMandatoryCredits / item.total).toFixed(1)),
+        'TB TC tự chọn thiếu': Number((item.averageElectiveCredits / item.total).toFixed(1)),
+        'TB TC nhóm khác thiếu': Number((item.averageOtherCredits / item.total).toFixed(1))
     }));
 }
 
@@ -169,7 +193,9 @@ export function createReportController({ globalData, showCustomMessage }) {
         }
 
         const summaryRows = buildFacultyExportSummary(selectedRecords);
-        const studentRows = selectedRecords.map((student, index) => ({
+        const studentRows = selectedRecords.map((student, index) => {
+            const creditBreakdown = getFacultyCreditBreakdown(student);
+            return {
             STT: index + 1,
             MSSV: student.id,
             'Họ và tên': student.name,
@@ -177,15 +203,18 @@ export function createReportController({ globalData, showCustomMessage }) {
             Lop: student.className,
             'TC đã tích lũy': student.completedCredits ?? '',
             'TC còn thiếu': student.missingCredits,
+            'TC bắt buộc còn thiếu': creditBreakdown.mandatoryCredits,
+            'TC tự chọn còn thiếu': creditBreakdown.electiveCredits,
+            'TC nhóm khác/điều kiện còn thiếu': creditBreakdown.otherCredits,
             'HP còn thiếu': student.missingCourses,
-            'TC tự chọn còn thiếu': getElectiveMissingCredits(student),
             'Học phần bắt buộc phải hoàn thành': formatFacultyDetails(student.missingCourseDetails || [], 'mandatory'),
             'Điều kiện tốt nghiệp phải đạt': formatFacultyDetails(student.missingCourseDetails || [], 'condition'),
             'Môn tự chọn có thể chọn': formatFacultyDetails(student.missingCourseDetails || [], 'elective'),
             Nhom: groupLabel[student.group],
             'Khuyến nghị': student.recommendation,
             'Nguồn sheet': student.sourceSheet
-        }));
+            };
+        });
         const scopeLabel = exportScope === 'class'
             ? `Theo lớp: ${exportTarget}`
             : exportScope === 'student'
