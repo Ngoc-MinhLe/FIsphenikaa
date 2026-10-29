@@ -109,8 +109,8 @@ export function createReportController({ globalData, showCustomMessage }) {
             'TC đã tích lũy': student.completedCredits ?? '',
             'TC còn thiếu': student.missingCredits,
             'HP còn thiếu': student.missingCourses,
-            'Học phần còn thiếu': (student.missingCourseDetails || [])
-                .map(detail => `${detail.courseName} (${detail.credits} TC)`)
+            'Phương án học phần hỗ trợ': (student.missingCourseDetails || [])
+                .map(detail => `${detail.blockCode ? `[${detail.blockCode}] ` : ''}${detail.courseName} (${detail.credits} TC)`)
                 .join('\n'),
             Nhom: groupLabel[student.group],
             'Khuyến nghị': student.recommendation,

@@ -29,11 +29,15 @@ function parseNumber(value) {
 function findColumn(headerRows, aliases, { exact = false } = {}) {
     const normalizedAliases = aliases.map(normalizeText);
     const maxColumns = Math.max(...headerRows.map(row => row?.length || 0), 0);
-    for (let col = 0; col < maxColumns; col += 1) {
-        const value = normalizeText(headerRows.map(row => row?.[col]).filter(Boolean).join(' '));
-        if (!value) continue;
-        const matched = normalizedAliases.some(alias => exact ? value === alias : value.includes(alias));
-        if (matched) return col;
+    const columnValues = Array.from({ length: maxColumns }, (_, col) => normalizeText(
+        headerRows.map(row => row?.[col]).filter(Boolean).join(' ')
+    ));
+
+    // Ưu tiên alias cụ thể hơn trước. Nếu quét theo thứ tự cột, "TC thiếu"
+    // của từng khối (A1/B1/...) sẽ bị chọn trước "Tổng TC còn thiếu (A–E)".
+    for (const alias of normalizedAliases) {
+        const col = columnValues.findIndex(value => value && (exact ? value === alias : value.includes(alias)));
+        if (col >= 0) return col;
     }
     return -1;
 }
@@ -82,6 +86,8 @@ function parseDetailRows(matrix, headerRowIndex, headerRows, sheetName) {
     const courseCodeCol = findColumn(headerRows, ['MA HP', 'MA HOC PHAN', 'MA MON']);
     const courseNameCol = findColumn(headerRows, ['TEN HOC PHAN', 'TEN MON']);
     const creditsCol = findColumn(headerRows, ['SO TC', 'TIN CHI', 'TC'], { exact: true });
+    const blockCodeCol = findColumn(headerRows, ['MA KHOI', 'KHOI']);
+    const courseTypeCol = findColumn(headerRows, ['LOAI']);
     const noteCol = findColumn(headerRows, ['GHI CHU', 'TRANG THAI', 'LY DO']);
 
     if (idCol < 0 || (courseCodeCol < 0 && courseNameCol < 0) || creditsCol < 0) return [];
@@ -105,6 +111,8 @@ function parseDetailRows(matrix, headerRowIndex, headerRows, sheetName) {
             name,
             className,
             faculty: deriveFaculty(sheetName, className),
+            blockCode: text(blockCodeCol >= 0 ? row[blockCodeCol] : ''),
+            courseType: text(courseTypeCol >= 0 ? row[courseTypeCol] : ''),
             courseCode,
             courseName,
             credits,
