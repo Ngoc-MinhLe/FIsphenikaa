@@ -1,10 +1,6 @@
 import { normalizeText, sheetToMatrix } from './workbook-utils.js';
 
-const DEFAULT_CONFIG = {
-    metric: 'credits',
-    greenMax: 6,
-    yellowMax: 23
-};
+const DEFAULT_CONFIG = { rule: 'course-status' };
 
 function text(value) {
     return value === null || value === undefined ? '' : String(value).trim();
@@ -32,7 +28,8 @@ function parseNumber(value) {
 
 function findColumn(headerRows, aliases, { exact = false } = {}) {
     const normalizedAliases = aliases.map(normalizeText);
-    for (let col = 0; col < headerRows[0].length; col += 1) {
+    const maxColumns = Math.max(...headerRows.map(row => row?.length || 0), 0);
+    for (let col = 0; col < maxColumns; col += 1) {
         const value = normalizeText(headerRows.map(row => row?.[col]).filter(Boolean).join(' '));
         if (!value) continue;
         const matched = normalizedAliases.some(alias => exact ? value === alias : value.includes(alias));
@@ -45,13 +42,13 @@ function findHeaderRow(matrix) {
     let best = { index: -1, score: -1 };
     const limit = Math.min(matrix.length, 50);
     for (let rowIndex = 0; rowIndex < limit; rowIndex += 1) {
-        const row = matrix[rowIndex] || [];
-        const value = normalizeText(row.join(' '));
+        const value = normalizeText((matrix[rowIndex] || []).join(' '));
         let score = 0;
-        if (value.includes('MA SV') || value.includes('MSSV')) score += 5;
+        if (value.includes('MA SV') || value.includes('MSSV') || value.includes('MA SINH VIEN')) score += 5;
         if (value.includes('STT')) score += 2;
         if (value.includes('TONG TC CON THIEU') || value.includes('TC CON THIEU')) score += 5;
         if (value.includes('SO HP') || value.includes('SO MON')) score += 3;
+        if (value.includes('MA HP') || value.includes('TEN HOC PHAN') || value.includes('SO TC')) score += 3;
         if (value.includes('LOP')) score += 2;
         if (value.includes('KHOA') || value.includes('FACULTY')) score += 2;
         if (score > best.score) best = { index: rowIndex, score };
@@ -66,20 +63,66 @@ function deriveFaculty(sheetName, className) {
     return match?.[1] || sheetName;
 }
 
-function getRowsForSheet(matrix, sheetName) {
-    const headerRowIndex = findHeaderRow(matrix);
-    if (headerRowIndex < 0) return [];
+function getHeaderRows(matrix, headerRowIndex) {
+    const rows = [matrix[headerRowIndex] || []];
+    const nextRow = matrix[headerRowIndex + 1] || [];
+    const nextValue = normalizeText(nextRow.join(' '));
+    if (nextValue.includes('DA TL') || nextValue.includes('THIEU') || nextValue.includes('DIEM') || nextValue.includes('DANH GIA')) {
+        rows.push(nextRow);
+    }
+    return rows;
+}
 
-    const headerRows = [matrix[headerRowIndex] || []];
-    if (matrix[headerRowIndex + 1]) headerRows.push(matrix[headerRowIndex + 1]);
+function parseDetailRows(matrix, headerRowIndex, headerRows, sheetName) {
+    const idCol = findColumn(headerRows, ['MA SV', 'MSSV', 'MA SINH VIEN', 'MA SO SINH VIEN']);
+    const nameCol = findColumn(headerRows, ['HO VA TEN', 'HO TEN', 'TEN SINH VIEN']);
+    const familyNameCol = findColumn(headerRows, ['HO DEM', 'HO VA DEM', 'HO']);
+    const givenNameCol = findColumn(headerRows, ['TEN'], { exact: true });
+    const classCol = findColumn(headerRows, ['LOP']);
+    const courseCodeCol = findColumn(headerRows, ['MA HP', 'MA HOC PHAN', 'MA MON']);
+    const courseNameCol = findColumn(headerRows, ['TEN HOC PHAN', 'TEN MON']);
+    const creditsCol = findColumn(headerRows, ['SO TC', 'TIN CHI', 'TC'], { exact: true });
+    const noteCol = findColumn(headerRows, ['GHI CHU', 'TRANG THAI', 'LY DO']);
+
+    if (idCol < 0 || (courseCodeCol < 0 && courseNameCol < 0) || creditsCol < 0) return [];
+
+    const details = [];
+    for (let rowIndex = headerRowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
+        const row = matrix[rowIndex] || [];
+        const id = text(row[idCol]);
+        if (!id || normalizeText(id).includes('MA SV')) continue;
+        const familyName = text(familyNameCol >= 0 ? row[familyNameCol] : '');
+        const givenName = text(givenNameCol >= 0 ? row[givenNameCol] : '');
+        const name = text(nameCol >= 0 ? row[nameCol] : '') || `${familyName} ${givenName}`.trim() || id;
+        const className = text(classCol >= 0 ? row[classCol] : '');
+        const courseCode = text(courseCodeCol >= 0 ? row[courseCodeCol] : '');
+        const courseName = text(courseNameCol >= 0 ? row[courseNameCol] : '') || courseCode;
+        const credits = parseNumber(row[creditsCol]);
+        if (!courseName || credits === null) continue;
+
+        details.push({
+            id,
+            name,
+            className,
+            faculty: deriveFaculty(sheetName, className),
+            courseCode,
+            courseName,
+            credits,
+            note: text(noteCol >= 0 ? row[noteCol] : ''),
+            sourceSheet: sheetName
+        });
+    }
+    return details;
+}
+
+function parseSummaryRows(matrix, headerRowIndex, headerRows, sheetName) {
     const maxColumns = Math.max(...headerRows.map(row => row.length), 0);
-
-    const idCol = findColumn(headerRows, ['MA SV', 'MSSV', 'MA SO SINH VIEN']);
+    const idCol = findColumn(headerRows, ['MA SV', 'MSSV', 'MA SINH VIEN', 'MA SO SINH VIEN']);
     const familyNameCol = findColumn(headerRows, ['HO DEM', 'HO VA DEM', 'HO']);
     const givenNameCol = findColumn(headerRows, ['TEN SINH VIEN', 'TEN'], { exact: true });
     const fullNameCol = findColumn(headerRows, ['HO VA TEN', 'HO TEN']);
     const dobCol = findColumn(headerRows, ['NGAY SINH', 'N SINH']);
-    const classCol = findColumn(headerRows, ['LOP', 'LỚP']);
+    const classCol = findColumn(headerRows, ['LOP']);
     const facultyCol = findColumn(headerRows, ['KHOA', 'DON VI', 'FACULTY', 'DEPARTMENT']);
     const missingCreditsCol = findColumn(headerRows, [
         'TONG TC CON THIEU', 'SO TC CON THIEU', 'TC CON THIEU', 'TC THIEU'
@@ -101,14 +144,14 @@ function getRowsForSheet(matrix, sheetName) {
         }
     }
 
-    if (missingCreditsCol < 0 && missingCoursesCol < 0 && fallbackMissingCreditCols.length === 0) {
+    if (idCol < 0 || (missingCreditsCol < 0 && missingCoursesCol < 0 && fallbackMissingCreditCols.length === 0)) {
         return [];
     }
 
     const students = [];
     for (let rowIndex = headerRowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
         const row = matrix[rowIndex] || [];
-        const id = text(idCol >= 0 ? row[idCol] : '');
+        const id = text(row[idCol]);
         const familyName = text(familyNameCol >= 0 ? row[familyNameCol] : '');
         const givenName = text(givenNameCol >= 0 ? row[givenNameCol] : '');
         const fullName = fullNameCol >= 0 ? text(row[fullNameCol]) : `${familyName} ${givenName}`.trim();
@@ -119,12 +162,9 @@ function getRowsForSheet(matrix, sheetName) {
             ? parseNumber(row[missingCreditsCol])
             : fallbackMissingCreditCols.reduce((sum, col) => sum + (parseNumber(row[col]) || 0), 0);
         const missingCourses = missingCoursesCol >= 0 ? parseNumber(row[missingCoursesCol]) : null;
-
         students.push({
             id,
             name: fullName || id,
-            familyName,
-            givenName,
             dob: text(dobCol >= 0 ? row[dobCol] : ''),
             className: text(classCol >= 0 ? row[classCol] : ''),
             faculty: text(facultyCol >= 0 ? row[facultyCol] : '') || deriveFaculty(sheetName, text(classCol >= 0 ? row[classCol] : '')),
@@ -132,17 +172,20 @@ function getRowsForSheet(matrix, sheetName) {
             missingCredits: missingCredits ?? 0,
             missingCourses: missingCourses ?? 0,
             gpa: parseNumber(gpaCol >= 0 ? row[gpaCol] : null),
+            missingCourseDetails: [],
             sourceSheet: sheetName
         });
     }
-
     return students;
 }
 
-function groupForValue(value, config) {
-    if (value <= config.greenMax) return 'green';
-    if (value <= config.yellowMax) return 'yellow';
-    return 'red';
+function getRowsForSheet(matrix, sheetName) {
+    const headerRowIndex = findHeaderRow(matrix);
+    if (headerRowIndex < 0) return { students: [], details: [] };
+    const headerRows = getHeaderRows(matrix, headerRowIndex);
+    const summaryRows = parseSummaryRows(matrix, headerRowIndex, headerRows, sheetName);
+    if (summaryRows.length) return { students: summaryRows, details: [] };
+    return { students: [], details: parseDetailRows(matrix, headerRowIndex, headerRows, sheetName) };
 }
 
 function buildFacultySummary(students) {
@@ -175,42 +218,74 @@ function buildFacultySummary(students) {
         .sort((a, b) => a.faculty.localeCompare(b.faculty, 'vi'));
 }
 
+function classifyStudent(student) {
+    if ((student.missingCourses || 0) === 0 && (student.missingCredits || 0) === 0) return 'green';
+    if ((student.missingCourses || 0) >= 2 && (student.missingCourses || 0) <= 3) return 'yellow';
+    return 'red';
+}
+
 export function parseFacultyWorkbook(workbook) {
-    const students = [];
+    const summaryStudents = [];
+    const detailRows = [];
     (workbook.SheetNames || []).forEach(sheetName => {
         const sheet = workbook.Sheets[sheetName];
         if (!sheet) return;
-        students.push(...getRowsForSheet(sheetToMatrix(sheet), sheetName));
+        const parsed = getRowsForSheet(sheetToMatrix(sheet), sheetName);
+        summaryStudents.push(...parsed.students);
+        detailRows.push(...parsed.details);
+    });
+
+    const detailsByStudent = new Map();
+    detailRows.forEach(detail => {
+        if (!detailsByStudent.has(detail.id)) detailsByStudent.set(detail.id, new Map());
+        const key = detail.courseCode || detail.courseName;
+        detailsByStudent.get(detail.id).set(key, detail);
     });
 
     const deduped = new Map();
-    students.forEach(student => {
+    summaryStudents.forEach(student => {
         const key = `${student.faculty}::${student.id || student.name}::${student.className}`;
-        if (!deduped.has(key)) deduped.set(key, student);
+        const details = [...(detailsByStudent.get(student.id)?.values() || [])];
+        const enriched = {
+            ...student,
+            missingCourseDetails: details,
+            missingCourses: student.missingCourses || details.length,
+            missingCredits: student.missingCredits || details.reduce((sum, item) => sum + item.credits, 0)
+        };
+        if (!deduped.has(key)) deduped.set(key, enriched);
     });
+
+    if (!deduped.size && detailRows.length) {
+        const grouped = new Map();
+        detailRows.forEach(detail => {
+            if (!grouped.has(detail.id)) grouped.set(detail.id, { ...detail, missingCourseDetails: [] });
+            grouped.get(detail.id).missingCourseDetails.push(detail);
+        });
+        grouped.forEach(detail => deduped.set(`${detail.faculty}::${detail.id}::${detail.className}`, {
+            ...detail,
+            name: detail.name || detail.id,
+            missingCourses: detail.missingCourseDetails.length,
+            missingCredits: detail.missingCourseDetails.reduce((sum, item) => sum + item.credits, 0),
+            completedCredits: null,
+            gpa: null
+        }));
+    }
+
     return [...deduped.values()];
 }
 
 export function buildFacultyReport(records, inputConfig = {}) {
-    const config = {
-        ...DEFAULT_CONFIG,
-        ...inputConfig,
-        greenMax: Math.max(0, Number(inputConfig.greenMax ?? DEFAULT_CONFIG.greenMax)),
-        yellowMax: Math.max(1, Number(inputConfig.yellowMax ?? DEFAULT_CONFIG.yellowMax))
-    };
-    if (config.yellowMax <= config.greenMax) config.yellowMax = config.greenMax + 1;
-
+    const config = { ...DEFAULT_CONFIG, ...inputConfig };
     const students = (records || []).map(student => {
-        const metricValue = config.metric === 'courses' ? student.missingCourses : student.missingCredits;
-        const group = groupForValue(metricValue || 0, config);
+        const group = classifyStudent(student);
         return {
             ...student,
-            metricValue: metricValue || 0,
+            metricValue: student.missingCourses || 0,
             group,
             recommendation: group === 'green'
                 ? 'Theo dõi để hoàn thành đúng hạn'
                 : group === 'yellow'
-                    ? 'Ưu tiên hỗ trợ các học phần còn thiếu'
+                    ? 'Ưu tiên hỗ trợ 2–3 học phần còn thiếu'
                     : 'Cần lập kế hoạch hỗ trợ và cảnh báo sớm'
         };
     });
@@ -235,7 +310,7 @@ export function buildFacultyReport(records, inputConfig = {}) {
 export function createFacultyReport(workbook, inputConfig = {}) {
     const records = parseFacultyWorkbook(workbook);
     if (!records.length) {
-        throw new Error('Không tìm thấy bảng dữ liệu sinh viên có cột Mã SV/MSSV và thông tin tín chỉ còn thiếu.');
+        throw new Error('Không tìm thấy bảng dữ liệu sinh viên có cột Mã SV/MSSV và thông tin tín chỉ hoặc học phần còn thiếu.');
     }
     return buildFacultyReport(records, inputConfig);
 }

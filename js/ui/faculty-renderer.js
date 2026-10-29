@@ -1,4 +1,3 @@
-import { buildFacultyReport } from '../excel/faculty-analysis.js';
 
 const GROUP_META = {
     green: { label: 'Xanh', description: 'Có khả năng hoàn thành đúng hạn', classes: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
@@ -63,6 +62,10 @@ function renderStudentRows(report, search, facultyFilter, groupFilter) {
 
     const rows = filtered.map((student, index) => {
         const meta = GROUP_META[student.group];
+        const details = student.missingCourseDetails || [];
+        const courseDetailsMarkup = details.length
+            ? `<details class="text-left"><summary class="cursor-pointer font-semibold text-brand-700">Xem ${details.length} học phần</summary><ul class="mt-2 space-y-1 text-xs text-slate-600">${details.map(detail => `<li><span class="font-semibold">${escapeHtml(detail.courseName)}</span> <span class="text-slate-400">(${formatNumber(detail.credits)} TC)</span></li>`).join('')}</ul></details>`
+            : '<span class="text-slate-400">Chưa có chi tiết học phần</span>';
         return `
             <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                 <td class="px-3 py-3 text-center text-slate-500">${index + 1}</td>
@@ -73,13 +76,14 @@ function renderStudentRows(report, search, facultyFilter, groupFilter) {
                 <td class="px-3 py-3 text-center font-semibold">${formatNumber(student.missingCredits)}</td>
                 <td class="px-3 py-3 text-center font-semibold">${formatNumber(student.missingCourses)}</td>
                 <td class="px-3 py-3 text-center"><span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-extrabold ${meta.classes}">${meta.label}</span></td>
+                <td class="px-3 py-3 text-xs min-w-64">${courseDetailsMarkup}</td>
                 <td class="px-3 py-3 text-xs text-slate-500 min-w-52">${escapeHtml(student.recommendation)}</td>
             </tr>`;
     }).join('');
 
     return {
         count: filtered.length,
-        html: rows || `<tr><td colspan="9" class="px-4 py-10 text-center text-slate-400">Không có sinh viên phù hợp.</td></tr>`
+        html: rows || `<tr><td colspan="10" class="px-4 py-10 text-center text-slate-400">Không có sinh viên phù hợp.</td></tr>`
     };
 }
 
@@ -98,7 +102,6 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
         return;
     }
 
-    const config = report.config;
     const facultyFilter = document.getElementById('facultyFilterSelect')?.value || 'ALL';
     const groupFilter = document.getElementById('facultyGroupFilter')?.value || 'ALL';
     const search = document.getElementById('facultyStudentSearch')?.value || '';
@@ -122,26 +125,25 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
             <div class="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
                 <div class="mb-4 flex items-center justify-between gap-3">
                     <div>
-                        <h4 class="font-extrabold text-slate-800">Thiết lập phân nhóm</h4>
-                        <p class="mt-1 text-xs text-slate-500">Mặc định: Xanh ≤ 6 TC, Vàng 7–23 TC, Đỏ ≥ 24 TC. Có thể điều chỉnh theo yêu cầu của nhà trường.</p>
+                        <h4 class="font-extrabold text-slate-800">Quy tắc phân nhóm theo yêu cầu</h4>
+                        <p class="mt-1 text-xs text-slate-500">Xanh: không còn thiếu học phần và tín chỉ. Vàng: còn thiếu 2–3 học phần. Đỏ: các trường hợp còn lại.</p>
                     </div>
-                    <span class="rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-600">${config.metric === 'credits' ? 'Đang tính theo TC' : 'Đang tính theo HP'}</span>
+                    <span class="rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-600">TC dùng để hỗ trợ</span>
                 </div>
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
                     <label class="text-xs font-semibold text-slate-600">Chỉ số phân nhóm
-                        <select id="facultyMetricSelect" class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700">
-                            <option value="credits" ${config.metric === 'credits' ? 'selected' : ''}>Tín chỉ còn thiếu</option>
-                            <option value="courses" ${config.metric === 'courses' ? 'selected' : ''}>Học phần còn thiếu</option>
+                        <select id="facultyMetricSelect" disabled class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm font-semibold text-slate-700">
+                            <option selected>Học phần còn thiếu</option>
                         </select>
                     </label>
                     <label class="text-xs font-semibold text-slate-600">Xanh tối đa
-                        <input id="facultyGreenMax" type="number" min="0" value="${config.greenMax}" class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700">
+                        <input id="facultyGreenMax" type="text" value="0 HP và 0 TC" disabled class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm font-semibold text-slate-700">
                     </label>
                     <label class="text-xs font-semibold text-slate-600">Vàng tối đa
-                        <input id="facultyYellowMax" type="number" min="1" value="${config.yellowMax}" class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700">
+                        <input id="facultyYellowMax" type="text" value="2–3 HP" disabled class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm font-semibold text-slate-700">
                     </label>
                     <div class="flex items-end">
-                        <button id="applyFacultyConfig" class="w-full rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-brand-800">Áp dụng phân nhóm</button>
+                        <div class="w-full rounded-xl bg-slate-100 px-4 py-2.5 text-center text-sm font-bold text-slate-600">Đỏ: các trường hợp còn lại</div>
                     </div>
                 </div>
             </div>
@@ -160,7 +162,7 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
                         <select id="facultyGroupFilter" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold"><option value="ALL">Tất cả nhóm</option><option value="green">Xanh</option><option value="yellow">Vàng</option><option value="red">Đỏ</option></select>
                     </div>
                 </div>
-                <div class="overflow-x-auto"><table class="w-full min-w-[1180px] text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-3 py-3 text-center">STT</th><th class="px-3 py-3">MSSV</th><th class="px-3 py-3">Họ và tên</th><th class="px-3 py-3">Khoa / đơn vị</th><th class="px-3 py-3">Lớp</th><th class="px-3 py-3 text-center">TC thiếu</th><th class="px-3 py-3 text-center">HP thiếu</th><th class="px-3 py-3 text-center">Nhóm</th><th class="px-3 py-3">Khuyến nghị</th></tr></thead><tbody id="facultyStudentTableBody">${studentTable.html}</tbody></table></div>
+                <div class="overflow-x-auto"><table class="w-full min-w-[1420px] text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-3 py-3 text-center">STT</th><th class="px-3 py-3">MSSV</th><th class="px-3 py-3">Họ và tên</th><th class="px-3 py-3">Khoa / đơn vị</th><th class="px-3 py-3">Lớp</th><th class="px-3 py-3 text-center">TC thiếu</th><th class="px-3 py-3 text-center">HP thiếu</th><th class="px-3 py-3 text-center">Nhóm</th><th class="px-3 py-3">Học phần còn thiếu</th><th class="px-3 py-3">Khuyến nghị</th></tr></thead><tbody id="facultyStudentTableBody">${studentTable.html}</tbody></table></div>
             </div>
         </div>`;
 
@@ -184,14 +186,5 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
     });
     ['facultyFilterSelect', 'facultyGroupFilter'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', rerender);
-    });
-    document.getElementById('applyFacultyConfig')?.addEventListener('click', () => {
-        const nextConfig = {
-            metric: document.getElementById('facultyMetricSelect').value,
-            greenMax: Number(document.getElementById('facultyGreenMax').value),
-            yellowMax: Number(document.getElementById('facultyYellowMax').value)
-        };
-        globalData.facultyReport = buildFacultyReport(globalData.facultyReport.records, nextConfig);
-        onConfigChanged();
     });
 }

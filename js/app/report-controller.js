@@ -109,14 +109,15 @@ export function createReportController({ globalData, showCustomMessage }) {
             'TC đã tích lũy': student.completedCredits ?? '',
             'TC còn thiếu': student.missingCredits,
             'HP còn thiếu': student.missingCourses,
+            'Học phần còn thiếu': (student.missingCourseDetails || [])
+                .map(detail => `${detail.courseName} (${detail.credits} TC)`)
+                .join('\n'),
             Nhom: groupLabel[student.group],
             'Khuyến nghị': student.recommendation,
             'Nguồn sheet': student.sourceSheet
         }));
         const configRows = [
-            { ThiếtLập: 'Chỉ số phân nhóm', GiáTrị: report.config.metric === 'credits' ? 'Tín chỉ còn thiếu' : 'Học phần còn thiếu' },
-            { ThiếtLập: 'Nhóm Xanh tối đa', GiáTrị: report.config.greenMax },
-            { ThiếtLập: 'Nhóm Vàng tối đa', GiáTrị: report.config.yellowMax },
+            { ThiếtLập: 'Quy tắc phân nhóm', GiáTrị: 'Xanh: 0 HP và 0 TC; Vàng: 2–3 HP; Đỏ: các trường hợp còn lại' },
             { ThiếtLập: 'Tổng sinh viên', GiáTrị: report.summary.total }
         ];
 
