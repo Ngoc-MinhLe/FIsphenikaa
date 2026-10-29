@@ -90,7 +90,7 @@ export function createReportController({ globalData, showCustomMessage }) {
             return;
         }
 
-        const groupLabel = { green: 'Xanh', yellow: 'Vàng', red: 'Đỏ' };
+        const groupLabel = { green: 'Xanh · Đúng hạn', yellow: 'Vàng · Có khả năng đúng hạn', red: 'Đỏ · Cần hỗ trợ' };
         const summaryRows = report.faculties.map(item => ({
             'Khoa / đơn vị': item.faculty,
             'Tổng số SV': item.total,

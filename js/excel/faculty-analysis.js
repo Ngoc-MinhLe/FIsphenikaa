@@ -162,12 +162,17 @@ function parseSummaryRows(matrix, headerRowIndex, headerRows, sheetName) {
             ? parseNumber(row[missingCreditsCol])
             : fallbackMissingCreditCols.reduce((sum, col) => sum + (parseNumber(row[col]) || 0), 0);
         const missingCourses = missingCoursesCol >= 0 ? parseNumber(row[missingCoursesCol]) : null;
+        const rawFaculty = text(facultyCol >= 0 ? row[facultyCol] : '');
+        const faculty = rawFaculty && !(/^[-+]?\d+(?:[.,]\d+)?$/).test(rawFaculty)
+            ? rawFaculty
+            : deriveFaculty(sheetName, text(classCol >= 0 ? row[classCol] : ''));
+
         students.push({
             id,
             name: fullName || id,
             dob: text(dobCol >= 0 ? row[dobCol] : ''),
             className: text(classCol >= 0 ? row[classCol] : ''),
-            faculty: text(facultyCol >= 0 ? row[facultyCol] : '') || deriveFaculty(sheetName, text(classCol >= 0 ? row[classCol] : '')),
+            faculty,
             completedCredits: parseNumber(completedCreditsCol >= 0 ? row[completedCreditsCol] : null),
             missingCredits: missingCredits ?? 0,
             missingCourses: missingCourses ?? 0,
@@ -249,8 +254,8 @@ export function parseFacultyWorkbook(workbook) {
         const enriched = {
             ...student,
             missingCourseDetails: details,
-            missingCourses: student.missingCourses || details.length,
-            missingCredits: student.missingCredits || details.reduce((sum, item) => sum + item.credits, 0)
+            missingCourses: student.missingCourses ?? details.length,
+            missingCredits: student.missingCredits ?? details.reduce((sum, item) => sum + item.credits, 0)
         };
         if (!deduped.has(key)) deduped.set(key, enriched);
     });
@@ -283,7 +288,7 @@ export function buildFacultyReport(records, inputConfig = {}) {
             metricValue: student.missingCourses || 0,
             group,
             recommendation: group === 'green'
-                ? 'Theo dõi để hoàn thành đúng hạn'
+                ? 'Đúng hạn: không còn học phần/tín chỉ thiếu'
                 : group === 'yellow'
                     ? 'Ưu tiên hỗ trợ 2–3 học phần còn thiếu'
                     : 'Cần lập kế hoạch hỗ trợ và cảnh báo sớm'

@@ -1,8 +1,8 @@
 
 const GROUP_META = {
-    green: { label: 'Xanh', description: 'Có khả năng hoàn thành đúng hạn', classes: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-    yellow: { label: 'Vàng', description: 'Cần hỗ trợ học phần còn thiếu', classes: 'bg-amber-50 text-amber-700 border-amber-100' },
-    red: { label: 'Đỏ', description: 'Rủi ro tiến độ, cần can thiệp sớm', classes: 'bg-rose-50 text-rose-700 border-rose-100' }
+    green: { label: 'Xanh · Đúng hạn', description: 'Không còn nợ học phần hoặc tín chỉ', classes: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+    yellow: { label: 'Vàng · Có khả năng đúng hạn', description: 'Còn thiếu 2–3 học phần', classes: 'bg-amber-50 text-amber-700 border-amber-100' },
+    red: { label: 'Đỏ · Cần hỗ trợ', description: 'Các trường hợp còn lại', classes: 'bg-rose-50 text-rose-700 border-rose-100' }
 };
 
 function escapeHtml(value) {
@@ -63,8 +63,14 @@ function renderStudentRows(report, search, facultyFilter, groupFilter) {
     const rows = filtered.map((student, index) => {
         const meta = GROUP_META[student.group];
         const details = student.missingCourseDetails || [];
+        const detailLabel = details.length === (student.missingCourses || 0)
+            ? `Xem ${details.length} học phần`
+            : `Xem ${details.length} học phần / phương án`;
+        const detailNote = details.length !== (student.missingCourses || 0)
+            ? `<p class="mt-2 text-[11px] text-slate-500">HP chưa hoàn thành theo bảng tổng hợp: ${formatNumber(student.missingCourses)}. Danh sách chi tiết có thể bao gồm nhiều phương án cho học phần tự chọn.</p>`
+            : '';
         const courseDetailsMarkup = details.length
-            ? `<details class="text-left"><summary class="cursor-pointer font-semibold text-brand-700">Xem ${details.length} học phần</summary><ul class="mt-2 space-y-1 text-xs text-slate-600">${details.map(detail => `<li><span class="font-semibold">${escapeHtml(detail.courseName)}</span> <span class="text-slate-400">(${formatNumber(detail.credits)} TC)</span></li>`).join('')}</ul></details>`
+            ? `<details class="text-left"><summary class="cursor-pointer font-semibold text-brand-700">${detailLabel}</summary>${detailNote}<ul class="mt-2 space-y-1 text-xs text-slate-600">${details.map(detail => `<li><span class="font-semibold">${escapeHtml(detail.courseName)}</span> <span class="text-slate-400">(${formatNumber(detail.credits)} TC)</span></li>`).join('')}</ul></details>`
             : '<span class="text-slate-400">Chưa có chi tiết học phần</span>';
         return `
             <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
@@ -159,7 +165,7 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
                     <div class="flex flex-col gap-2 sm:flex-row">
                         <input id="facultyStudentSearch" value="${escapeHtml(search)}" placeholder="Tìm MSSV, họ tên, lớp..." class="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-700">
                         <select id="facultyFilterSelect" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold"><option value="ALL">Tất cả khoa</option>${facultyOptions}</select>
-                        <select id="facultyGroupFilter" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold"><option value="ALL">Tất cả nhóm</option><option value="green">Xanh</option><option value="yellow">Vàng</option><option value="red">Đỏ</option></select>
+                        <select id="facultyGroupFilter" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold"><option value="ALL">Tất cả nhóm</option><option value="green">Xanh · Đúng hạn</option><option value="yellow">Vàng · Có khả năng đúng hạn</option><option value="red">Đỏ · Cần hỗ trợ</option></select>
                     </div>
                 </div>
                 <div class="overflow-x-auto"><table class="w-full min-w-[1420px] text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-3 py-3 text-center">STT</th><th class="px-3 py-3">MSSV</th><th class="px-3 py-3">Họ và tên</th><th class="px-3 py-3">Khoa / đơn vị</th><th class="px-3 py-3">Lớp</th><th class="px-3 py-3 text-center">TC thiếu</th><th class="px-3 py-3 text-center">HP thiếu</th><th class="px-3 py-3 text-center">Nhóm</th><th class="px-3 py-3">Học phần còn thiếu</th><th class="px-3 py-3">Khuyến nghị</th></tr></thead><tbody id="facultyStudentTableBody">${studentTable.html}</tbody></table></div>
