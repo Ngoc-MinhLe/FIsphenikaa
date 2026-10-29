@@ -90,7 +90,20 @@ function renderSupportDetailSection(title, details, student, { mandatory = false
     return `<section class="rounded-lg border border-slate-100 bg-white/70 p-2"><div class="text-xs font-extrabold ${mandatory ? 'text-rose-700' : 'text-slate-700'}">${title} (${details.length})</div>${blocks}</section>`;
 }
 
-function renderStudentRows(report, search, facultyFilter, groupFilter) {
+const FACULTY_PAGE_SIZE = 20;
+
+function renderFacultyPagination(page, totalPages) {
+    if (totalPages <= 1) return '';
+    const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+    const end = Math.min(totalPages, start + 4);
+    const pageButtons = [];
+    for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+        pageButtons.push(`<button type="button" data-faculty-page="${pageNumber}" class="rounded-lg px-3 py-1.5 text-xs font-bold ${pageNumber === page ? 'bg-brand-700 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}">${pageNumber}</button>`);
+    }
+    return `<div id="facultyPagination" class="mt-4 flex flex-wrap items-center justify-between gap-3"><span class="text-xs text-slate-500">Trang ${page}/${totalPages}</span><div class="flex items-center gap-1"><button type="button" data-faculty-page="${Math.max(1, page - 1)}" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 ${page === 1 ? 'pointer-events-none opacity-40' : ''}">Trước</button>${pageButtons.join('')}<button type="button" data-faculty-page="${Math.min(totalPages, page + 1)}" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 ${page === totalPages ? 'pointer-events-none opacity-40' : ''}">Sau</button></div></div>`;
+}
+
+function renderStudentRows(report, search, facultyFilter, groupFilter, requestedPage = 1) {
     const query = String(search || '').trim().toLocaleLowerCase('vi');
     const filtered = report.records.filter(student => {
         const matchesSearch = !query || [student.id, student.name, student.className, student.faculty]
@@ -100,7 +113,10 @@ function renderStudentRows(report, search, facultyFilter, groupFilter) {
         return matchesSearch && matchesFaculty && matchesGroup;
     });
 
-    const rows = filtered.map((student, index) => {
+    const totalPages = Math.max(1, Math.ceil(filtered.length / FACULTY_PAGE_SIZE));
+    const page = Math.min(Math.max(1, requestedPage), totalPages);
+    const pageRecords = filtered.slice((page - 1) * FACULTY_PAGE_SIZE, page * FACULTY_PAGE_SIZE);
+    const rows = pageRecords.map((student, index) => {
         const meta = GROUP_META[student.group];
         const details = student.missingCourseDetails || [];
         const mandatoryDetails = details.filter(detail => getDetailKind(detail) === 'mandatory');
@@ -120,7 +136,7 @@ function renderStudentRows(report, search, facultyFilter, groupFilter) {
             : '<span class="text-slate-400">Chưa có chi tiết học phần</span>';
         return `
             <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                <td class="px-3 py-3 text-center text-slate-500">${index + 1}</td>
+                <td class="px-3 py-3 text-center text-slate-500">${(page - 1) * FACULTY_PAGE_SIZE + index + 1}</td>
                 <td class="px-3 py-3 font-semibold text-slate-800 whitespace-nowrap">${escapeHtml(student.id)}</td>
                 <td class="px-3 py-3 text-slate-700">${escapeHtml(student.name)}</td>
                 <td class="px-3 py-3 text-slate-600">${escapeHtml(student.faculty)}</td>
@@ -135,8 +151,25 @@ function renderStudentRows(report, search, facultyFilter, groupFilter) {
 
     return {
         count: filtered.length,
-        html: rows || `<tr><td colspan="10" class="px-4 py-10 text-center text-slate-400">Không có sinh viên phù hợp.</td></tr>`
+        page,
+        totalPages,
+        html: rows || `<tr><td colspan="10" class="px-4 py-10 text-center text-slate-400">Không có sinh viên phù hợp.</td></tr>`,
+        paginationHtml: renderFacultyPagination(page, totalPages)
     };
+}
+
+function renderFacultyExportTargetOptions(report, scope, selectedTarget) {
+    if (scope === 'all') return '<option value="">Không cần chọn</option>';
+    if (scope === 'class') {
+        return [...new Set(report.records.map(student => student.className).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b, 'vi'))
+            .map(className => `<option value="${escapeHtml(className)}" ${className === selectedTarget ? 'selected' : ''}>${escapeHtml(className)}</option>`)
+            .join('');
+    }
+    return [...report.records]
+        .sort((a, b) => String(a.id).localeCompare(String(b.id), 'vi'))
+        .map(student => `<option value="${escapeHtml(student.id)}" ${student.id === selectedTarget ? 'selected' : ''}>${escapeHtml(student.id)} · ${escapeHtml(student.name)}</option>`)
+        .join('');
 }
 
 export function renderFacultyTabView({ globalData, onConfigChanged }) {
@@ -157,8 +190,12 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
     const facultyFilter = document.getElementById('facultyFilterSelect')?.value || 'ALL';
     const groupFilter = document.getElementById('facultyGroupFilter')?.value || 'ALL';
     const search = document.getElementById('facultyStudentSearch')?.value || '';
-    const studentTable = renderStudentRows(report, search, facultyFilter, groupFilter);
+    const currentPage = Number(document.getElementById('facultyPage')?.value || 1);
+    const exportScope = document.getElementById('facultyExportScope')?.value || 'all';
+    const exportTarget = document.getElementById('facultyExportTarget')?.value || '';
+    const studentTable = renderStudentRows(report, search, facultyFilter, groupFilter, currentPage);
     const facultyOptions = report.faculties.map(item => `<option value="${escapeHtml(item.faculty)}">${escapeHtml(item.faculty)}</option>`).join('');
+    const exportTargetOptions = renderFacultyExportTargetOptions(report, exportScope, exportTarget);
 
     container.innerHTML = `
         <div class="space-y-6">
@@ -167,9 +204,21 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
                     <h3 class="text-lg font-extrabold text-slate-800">Phân tích sinh viên K17 theo khoa</h3>
                     <p class="mt-1 text-xs text-slate-500">Nguồn: ${escapeHtml(report.sourceSheets.join(', '))} · ${formatNumber(report.summary.total)} sinh viên · ${formatNumber(report.summary.facultyCount)} khoa/đơn vị</p>
                 </div>
-                <button onclick="exportFacultyReport()" class="inline-flex items-center justify-center gap-2 rounded-xl bg-phenikaa-orange px-4 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-orange-600">
-                    <i class="fa-solid fa-file-excel"></i> Xuất báo cáo Excel
-                </button>
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <label class="text-[11px] font-bold text-slate-500">Phạm vi xuất
+                        <select id="facultyExportScope" class="mt-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold">
+                            <option value="all" ${exportScope === 'all' ? 'selected' : ''}>Toàn bộ</option>
+                            <option value="class" ${exportScope === 'class' ? 'selected' : ''}>Theo lớp</option>
+                            <option value="student" ${exportScope === 'student' ? 'selected' : ''}>Theo sinh viên</option>
+                        </select>
+                    </label>
+                    <label class="text-[11px] font-bold text-slate-500 ${exportScope === 'all' ? 'hidden' : ''}">Đối tượng
+                        <select id="facultyExportTarget" class="mt-1 min-w-56 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold">${exportTargetOptions}</select>
+                    </label>
+                    <button onclick="exportFacultyReport()" class="inline-flex items-center justify-center gap-2 rounded-xl bg-phenikaa-orange px-4 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-orange-600">
+                        <i class="fa-solid fa-file-excel"></i> Xuất Excel
+                    </button>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 gap-4 md:grid-cols-3">${renderGroupCards(report.summary)}</div>
@@ -215,6 +264,8 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
                     </div>
                 </div>
                 <div class="overflow-x-auto"><table class="w-full min-w-[1420px] text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-3 py-3 text-center">STT</th><th class="px-3 py-3">MSSV</th><th class="px-3 py-3">Họ và tên</th><th class="px-3 py-3">Khoa / đơn vị</th><th class="px-3 py-3">Lớp</th><th class="px-3 py-3 text-center">TC thiếu</th><th class="px-3 py-3 text-center">HP thiếu</th><th class="px-3 py-3 text-center">Nhóm</th><th class="px-3 py-3">Phương án học phần hỗ trợ</th><th class="px-3 py-3">Khuyến nghị</th></tr></thead><tbody id="facultyStudentTableBody">${studentTable.html}</tbody></table></div>
+                <input id="facultyPage" type="hidden" value="${studentTable.page}">
+                ${studentTable.paginationHtml}
             </div>
         </div>`;
 
@@ -223,18 +274,33 @@ export function renderFacultyTabView({ globalData, onConfigChanged }) {
     if (facultySelect) facultySelect.value = facultyFilter;
     if (groupSelect) groupSelect.value = groupFilter;
 
-    const rerender = () => renderFacultyTabView({ globalData, onConfigChanged });
-    document.getElementById('facultyStudentSearch')?.addEventListener('input', event => {
+    const updateStudentTable = page => {
         const next = renderStudentRows(
             report,
-            event.target.value,
+            document.getElementById('facultyStudentSearch')?.value || '',
             document.getElementById('facultyFilterSelect')?.value || 'ALL',
-            document.getElementById('facultyGroupFilter')?.value || 'ALL'
+            document.getElementById('facultyGroupFilter')?.value || 'ALL',
+            page
         );
         const body = document.getElementById('facultyStudentTableBody');
         const count = document.getElementById('facultyStudentCount');
+        const pageInput = document.getElementById('facultyPage');
         if (body) body.innerHTML = next.html;
         if (count) count.textContent = `(${formatNumber(next.count)} kết quả)`;
+        if (pageInput) pageInput.value = String(next.page);
+        const oldPagination = document.getElementById('facultyPagination');
+        if (oldPagination) oldPagination.outerHTML = next.paginationHtml;
+        document.querySelectorAll('[data-faculty-page]').forEach(button => {
+            button.addEventListener('click', () => updateStudentTable(Number(button.dataset.facultyPage)));
+        });
+    };
+
+    const rerender = () => renderFacultyTabView({ globalData, onConfigChanged });
+    document.getElementById('facultyStudentSearch')?.addEventListener('input', () => updateStudentTable(1));
+    document.getElementById('facultyExportScope')?.addEventListener('change', rerender);
+    document.getElementById('facultyExportTarget')?.addEventListener('change', () => {});
+    document.querySelectorAll('[data-faculty-page]').forEach(button => {
+        button.addEventListener('click', () => updateStudentTable(Number(button.dataset.facultyPage)));
     });
     ['facultyFilterSelect', 'facultyGroupFilter'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', rerender);

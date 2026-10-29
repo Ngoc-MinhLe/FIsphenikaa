@@ -23,6 +23,53 @@ function formatFacultyDetails(details, kind) {
         .join('\n');
 }
 
+const ELECTIVE_BLOCK_CODES = new Set(['A2', 'C2', 'D2.1']);
+
+function getElectiveMissingCredits(student) {
+    return [...ELECTIVE_BLOCK_CODES].reduce(
+        (sum, blockCode) => sum + Number(student.missingCreditsByBlock?.[blockCode] || 0),
+        0
+    );
+}
+
+function buildFacultyExportSummary(records) {
+    const groups = new Map();
+    records.forEach(student => {
+        const key = student.faculty || 'Chưa xác định';
+        if (!groups.has(key)) {
+            groups.set(key, {
+                faculty: key,
+                total: 0,
+                green: 0,
+                yellow: 0,
+                red: 0,
+                averageMissingCredits: 0,
+                averageMissingCourses: 0
+            });
+        }
+        const item = groups.get(key);
+        item.total += 1;
+        item[student.group] += 1;
+        item.averageMissingCredits += Number(student.missingCredits || 0);
+        item.averageMissingCourses += Number(student.missingCourses || 0);
+    });
+    return [...groups.values()].map(item => ({
+        'Khoa / đơn vị': item.faculty,
+        'Tổng số SV': item.total,
+        'Nhóm Xanh': item.green,
+        'Nhóm Vàng': item.yellow,
+        'Nhóm Đỏ': item.red,
+        'TB TC còn thiếu': Number((item.averageMissingCredits / item.total).toFixed(1)),
+        'TB HP còn thiếu': Number((item.averageMissingCourses / item.total).toFixed(1))
+    }));
+}
+
+function safeFilenamePart(value) {
+    return String(value || 'Tat_ca')
+        .replace(/[<>:\"/\\|?*]+/g, '_')
+        .replace(/\s+/g, '_');
+}
+
 export function createReportController({ globalData, showCustomMessage }) {
     function downloadReportWorkbook(filename, sheets) {
         const workbook = XLSX.utils.book_new();
@@ -108,16 +155,21 @@ export function createReportController({ globalData, showCustomMessage }) {
         }
 
         const groupLabel = { green: 'Xanh · Đúng hạn', yellow: 'Vàng · Có khả năng đúng hạn', red: 'Đỏ · Cần hỗ trợ' };
-        const summaryRows = report.faculties.map(item => ({
-            'Khoa / đơn vị': item.faculty,
-            'Tổng số SV': item.total,
-            'Nhom Xanh': item.green,
-            'Nhóm Vàng': item.yellow,
-            'Nhóm Đỏ': item.red,
-            'TB TC còn thiếu': Number(item.averageMissingCredits.toFixed(1)),
-            'TB HP còn thiếu': Number(item.averageMissingCourses.toFixed(1))
-        }));
-        const studentRows = report.records.map((student, index) => ({
+        const exportScope = document.getElementById('facultyExportScope')?.value || 'all';
+        const exportTarget = document.getElementById('facultyExportTarget')?.value || '';
+        const selectedRecords = exportScope === 'class'
+            ? report.records.filter(student => student.className === exportTarget)
+            : exportScope === 'student'
+                ? report.records.filter(student => student.id === exportTarget)
+                : report.records;
+
+        if (!selectedRecords.length) {
+            showCustomMessage('Không tìm thấy sinh viên phù hợp với phạm vi xuất đã chọn.', 'error');
+            return;
+        }
+
+        const summaryRows = buildFacultyExportSummary(selectedRecords);
+        const studentRows = selectedRecords.map((student, index) => ({
             STT: index + 1,
             MSSV: student.id,
             'Họ và tên': student.name,
@@ -126,21 +178,35 @@ export function createReportController({ globalData, showCustomMessage }) {
             'TC đã tích lũy': student.completedCredits ?? '',
             'TC còn thiếu': student.missingCredits,
             'HP còn thiếu': student.missingCourses,
+            'TC tự chọn còn thiếu': getElectiveMissingCredits(student),
             'Học phần bắt buộc phải hoàn thành': formatFacultyDetails(student.missingCourseDetails || [], 'mandatory'),
             'Điều kiện tốt nghiệp phải đạt': formatFacultyDetails(student.missingCourseDetails || [], 'condition'),
-            'Phương án tự chọn hỗ trợ': formatFacultyDetails(student.missingCourseDetails || [], 'elective'),
+            'Môn tự chọn có thể chọn': formatFacultyDetails(student.missingCourseDetails || [], 'elective'),
             Nhom: groupLabel[student.group],
             'Khuyến nghị': student.recommendation,
             'Nguồn sheet': student.sourceSheet
         }));
+        const scopeLabel = exportScope === 'class'
+            ? `Theo lớp: ${exportTarget}`
+            : exportScope === 'student'
+                ? `Theo sinh viên: ${exportTarget}`
+                : 'Toàn bộ sinh viên';
         const configRows = [
             { ThiếtLập: 'Quy tắc phân nhóm', GiáTrị: 'Xanh: 0 HP và 0 TC; Vàng: 2–3 HP; Đỏ: các trường hợp còn lại' },
-            { ThiếtLập: 'Tổng sinh viên', GiáTrị: report.summary.total }
+            { ThiếtLập: 'Phạm vi xuất', GiáTrị: scopeLabel },
+            { ThiếtLập: 'Tổng sinh viên', GiáTrị: selectedRecords.length }
         ];
 
-        downloadReportWorkbook('Bao_Cao_Phan_Tich_Sinh_Vien_Theo_Khoa.xlsx', [
+        const detailSheetName = exportScope === 'class'
+            ? `Lop_${safeFilenamePart(exportTarget)}`
+            : exportScope === 'student'
+                ? `SV_${safeFilenamePart(exportTarget)}`
+                : 'DanhSachSinhVien';
+        const filenamePart = exportScope === 'all' ? 'Tat_Ca' : safeFilenamePart(exportTarget);
+
+        downloadReportWorkbook(`Bao_Cao_Phan_Tich_Sinh_Vien_${filenamePart}.xlsx`, [
             { name: 'TongHopKhoa', rows: summaryRows },
-            { name: 'DanhSachSinhVien', rows: studentRows },
+            { name: detailSheetName, rows: studentRows },
             { name: 'CauHinhPhanNhom', rows: configRows }
         ]);
         showCustomMessage('Đã xuất báo cáo sinh viên theo khoa và nhóm Xanh/Vàng/Đỏ.', 'success');
