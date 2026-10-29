@@ -6,6 +6,7 @@ import {
     toggleAccordionView
 } from '../ui/student-renderer.js';
 import { renderOverviewTabView } from '../ui/overview-renderer.js';
+import { renderFacultyTabView } from '../ui/faculty-renderer.js';
 
 export function createDashboardController({ globalData, normalizeText, renderLogsTab }) {
     let currentTab = 'overview';
@@ -31,11 +32,12 @@ export function createDashboardController({ globalData, normalizeText, renderLog
         if (tabName === 'overview') renderOverviewTab();
         else if (tabName === 'students') renderStudentsTab();
         else if (tabName === 'subjects') renderSubjectsTab();
+        else if (tabName === 'faculty') renderFacultyTab();
         else if (tabName === 'logs') renderLogsTab();
     }
 
     function renderDashboard() {
-        const hasData = globalData.students.length > 0;
+        const hasData = globalData.students.length > 0 || Boolean(globalData.facultyReport?.records?.length);
         const uploadSection = document.getElementById('uploadSection');
         const dashboardSection = document.getElementById('dashboardSection');
         const headerActions = document.getElementById('headerActions');
@@ -49,9 +51,12 @@ export function createDashboardController({ globalData, normalizeText, renderLog
             if (emptyStateContainer) emptyStateContainer.classList.add('hidden');
             if (dataDependentContent) dataDependentContent.classList.remove('hidden');
 
-            document.getElementById('tabBtn-overview').classList.remove('hidden');
-            document.getElementById('tabBtn-students').classList.remove('hidden');
-            document.getElementById('tabBtn-subjects').classList.remove('hidden');
+            const hasStudents = globalData.students.length > 0;
+            document.getElementById('tabBtn-overview').classList.toggle('hidden', !hasStudents && !globalData.facultyReport);
+            document.getElementById('tabBtn-students').classList.toggle('hidden', !hasStudents);
+            document.getElementById('tabBtn-subjects').classList.toggle('hidden', !hasStudents);
+            document.getElementById('tabBtn-faculty')?.classList.toggle('hidden', !globalData.facultyReport);
+            if (currentTab === 'faculty' && !globalData.facultyReport) currentTab = 'overview';
             switchTab(currentTab);
             return;
         }
@@ -79,11 +84,19 @@ export function createDashboardController({ globalData, normalizeText, renderLog
         renderSubjectsTabView({ globalData, normalizeText });
     }
 
+    function renderFacultyTab() {
+        renderFacultyTabView({
+            globalData,
+            onConfigChanged: renderFacultyTab
+        });
+    }
+
     return {
         switchTab,
         renderDashboard,
         renderStudentsTab,
         renderSubjectsTab,
+        renderFacultyTab,
         toggleAccordion
     };
 }

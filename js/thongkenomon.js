@@ -62,13 +62,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // --- GẮN CÁC HÀM VÀO WINDOW ĐỂ HTML CÓ THỂ GỌI ---
     window.startAnalysis = analysisController.startAnalysis;
+    window.startFacultyAnalysis = analysisController.startFacultyAnalysis;
     window.loadDemoData = analysisController.loadDemoData;
     window.exportToExcel = reportController.exportToExcel;
     window.exportSummaryToExcel = reportController.exportSummaryToExcel;
     window.exportClassOpeningReport = reportController.exportClassOpeningReport;
+    window.exportFacultyReport = reportController.exportFacultyReport;
     window.switchTab = dashboardController.switchTab;
     window.renderStudentsTab = dashboardController.renderStudentsTab;
     window.renderSubjectsTab = dashboardController.renderSubjectsTab;
+    window.renderFacultyTab = dashboardController.renderFacultyTab;
     window.toggleAccordion = dashboardController.toggleAccordion;
     window.openSubjectModal = openSubjectModal;
     window.closeSubjectModal = closeSubjectModal;
@@ -90,9 +93,11 @@ window.addEventListener('DOMContentLoaded', () => {
     // Attach listeners for file select
     const studentInput = document.getElementById('studentFileInput');
     const frameworkInput = document.getElementById('frameworkFileInput');
+    const facultyInput = document.getElementById('facultyFileInput');
     
     studentInput.addEventListener('change', (e) => analysisController.handleFileSelect(e, 'student'));
     frameworkInput.addEventListener('change', (e) => analysisController.handleFileSelect(e, 'framework'));
+    facultyInput?.addEventListener('change', (e) => analysisController.handleFileSelect(e, 'faculty'));
 
     // Listen for Firebase auth state
     onAuthStateChanged(auth, (user) => {

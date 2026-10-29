@@ -92,16 +92,16 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
 
         <!-- File Upload & Drag-and-Drop Zone -->
-        <div id="uploadSection" class="hidden max-w-4xl mx-auto mt-4 bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200/60 relative overflow-hidden transition-all duration-300">
+        <div id="uploadSection" class="hidden max-w-6xl mx-auto mt-4 bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200/60 relative overflow-hidden transition-all duration-300">
             <div class="absolute -top-12 -right-12 w-40 h-40 bg-orange-50/50 rounded-full blur-2xl opacity-60 pointer-events-none"></div>
             <div class="absolute -bottom-12 -left-12 w-40 h-40 bg-blue-50/50 rounded-full blur-2xl opacity-60 pointer-events-none"></div>
             
             <div class="relative z-10 pointer-events-auto text-center">
                 <h2 class="text-2xl font-extrabold text-slate-800 mb-2">Tải Lên Dữ Liệu Excel</h2>
-                <p class="text-slate-500 text-sm mb-8 leading-relaxed max-w-lg mx-auto">Vui lòng chọn bảng điểm toàn khóa của sinh viên để bóc tách nợ môn, và tùy chọn tải lên khung chương trình đào tạo để đối sánh lộ trình tốt nghiệp.</p>
+                <p class="text-slate-500 text-sm mb-8 leading-relaxed max-w-2xl mx-auto">Tải bảng điểm để bóc tách nợ môn, khung chương trình để đối sánh lộ trình tốt nghiệp, hoặc báo cáo Đào tạo để phân tích sinh viên theo khoa và nhóm Xanh/Vàng/Đỏ.</p>
 
-                <!-- Two Upload Slots Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8">
+                <!-- Upload Slots Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto mb-8">
                     <!-- Zone 1: Student grades sheet -->
                     <div id="studentDropZone" class="bg-slate-50/50 p-6 rounded-3xl border-2 border-dashed border-slate-200 hover:border-brand-700 transition-all flex flex-col items-center justify-center text-center cursor-pointer relative group">
                         <input type="file" id="studentFileInput" accept=".xlsx, .xls" class="hidden">
@@ -123,12 +123,26 @@
                         <p class="text-xs text-slate-500 mt-1 max-w-xs">Kéo thả hoặc nhấp vào đây để chọn tệp khung đào tạo (.xlsx)</p>
                         <span id="frameworkFileStatus" class="mt-4 px-3.5 py-1 bg-slate-200/60 text-slate-600 rounded-xl text-xs font-bold transition-all">Chưa tải lên (Tùy chọn)</span>
                     </div>
+                    <div id="facultyDropZone" class="bg-blue-50/40 p-6 rounded-3xl border-2 border-dashed border-blue-200 hover:border-brand-700 transition-all flex flex-col items-center justify-center text-center cursor-pointer relative group">
+                        <input type="file" id="facultyFileInput" accept=".xlsx, .xls" class="hidden">
+                        <div class="w-16 h-16 bg-indigo-50 text-indigo-700 rounded-2xl flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-building-columns"></i>
+                        </div>
+                        <h4 class="font-bold text-slate-800 text-sm">3. Dữ liệu Đào tạo theo khoa</h4>
+                        <p class="text-xs text-slate-500 mt-1 max-w-xs">Tải báo cáo có Mã SV, khoa/lớp, TC còn thiếu hoặc số HP chưa hoàn thành</p>
+                        <span id="facultyFileStatus" class="mt-4 px-3.5 py-1 bg-slate-200/60 text-slate-600 rounded-xl text-xs font-bold transition-all">Chưa tải lên</span>
+                    </div>
                 </div>
                 
                 <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
                     <button id="btnAnalyze" onclick="startAnalysis()" class="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-brand-700 hover:bg-brand-800 disabled:bg-slate-300 text-white font-bold px-10 py-4 rounded-2xl shadow-lg cursor-pointer transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                         <i class="fa-solid fa-wand-magic-sparkles text-lg"></i>
                         <span>Bắt Đầu Phân Tích & Đối Sánh</span>
+                    </button>
+
+                    <button id="btnAnalyzeFaculty" onclick="startFacultyAnalysis()" class="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold px-8 py-4 rounded-2xl shadow-lg cursor-pointer transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fa-solid fa-building-columns text-lg"></i>
+                        <span>Phân tích theo khoa</span>
                     </button>
 
                     <button onclick="loadDemoData()" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-8 py-4 rounded-2xl transition-all duration-200 border border-slate-200">
@@ -140,6 +154,10 @@
                 <div id="loadingSpinner" class="hidden mt-8 flex flex-col items-center justify-center gap-3">
                     <div class="w-8 h-8 border-4 border-phenikaa-orange border-t-transparent rounded-full animate-spin"></div>
                     <span class="text-sm font-semibold text-slate-600 animate-pulse">Đang quét bóc tách lịch sử điểm thi lại / học lại...</span>
+                </div>
+                <div id="facultyLoadingSpinner" class="hidden mt-8 flex flex-col items-center justify-center gap-3">
+                    <div class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-sm font-semibold text-slate-600 animate-pulse">Đang phân tích danh sách sinh viên theo khoa...</span>
                 </div>
             </div>
         </div>
@@ -157,6 +175,9 @@
                     </button>
                     <button onclick="switchTab('subjects')" id="tabBtn-subjects" class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 hover:text-slate-900 transition-all duration-200">
                         <i class="fa-solid fa-book-bookmark mr-2"></i>Thống Kê Theo Môn Học
+                    </button>
+                    <button onclick="switchTab('faculty')" id="tabBtn-faculty" class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 hover:text-slate-900 transition-all duration-200">
+                        <i class="fa-solid fa-building-columns mr-2"></i>Phân Tích Theo Khoa
                     </button>
                     <button onclick="switchTab('logs')" id="tabBtn-logs" class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 hover:text-slate-900 transition-all duration-200">
                         <i class="fa-solid fa-clock-rotate-left mr-2"></i>Nhật Ký Thông Báo
@@ -312,7 +333,12 @@
                     </div>
                 </div>
 
-                <!-- Tab 4: Communication Logs -->
+                <!-- Tab 4: Faculty analysis -->
+                <div id="tabContent-faculty" class="tab-content hidden space-y-6">
+                    <div id="facultyAnalysisContainer"></div>
+                </div>
+
+                <!-- Tab 5: Communication Logs -->
                 <div id="tabContent-logs" class="tab-content hidden space-y-6">
                     <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                         <div class="flex items-center justify-between">

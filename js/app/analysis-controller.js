@@ -4,10 +4,12 @@ import { parseFrameworkWorkbook as parseFrameworkWorkbookData } from '../excel/f
 import { createDemoData } from '../demo/demo-data.js';
 import { createEmptyGlobalData } from '../state/app-state.js';
 import { setupFileDropZones, loadWorkbookFile } from '../ui/file-importer.js';
+import { createFacultyReport } from '../excel/faculty-analysis.js';
 
 export function createAnalysisController({ globalData, showCustomMessage, onDataChanged }) {
     let loadedStudentWorkbook = null;
     let loadedFrameworkWorkbook = null;
+    let loadedFacultyWorkbook = null;
 
     function setupDragAndDrop() {
         setupFileDropZones((file, type) => loadExcelFile(file, type));
@@ -27,6 +29,9 @@ export function createAnalysisController({ globalData, showCustomMessage, onData
             },
             onFrameworkWorkbook: workbook => {
                 loadedFrameworkWorkbook = workbook;
+            },
+            onFacultyWorkbook: workbook => {
+                loadedFacultyWorkbook = workbook;
             }
         });
     }
@@ -62,9 +67,34 @@ export function createAnalysisController({ globalData, showCustomMessage, onData
         }, 50);
     }
 
+    function startFacultyAnalysis() {
+        if (!loadedFacultyWorkbook) {
+            showCustomMessage('Vui lòng tải lên file dữ liệu Đào tạo theo khoa trước!', 'error');
+            return;
+        }
+
+        const spinner = document.getElementById('facultyLoadingSpinner');
+        if (spinner) spinner.classList.remove('hidden');
+
+        setTimeout(() => {
+            try {
+                globalData.facultyReport = createFacultyReport(loadedFacultyWorkbook);
+                onDataChanged();
+                setTimeout(() => window.switchTab?.('faculty'), 0);
+                showCustomMessage('Phân tích danh sách sinh viên theo khoa thành công!', 'success');
+            } catch (err) {
+                console.error('Faculty analysis error:', err);
+                showCustomMessage(`Có lỗi khi phân tích dữ liệu theo khoa: ${err.message}`, 'error');
+            } finally {
+                if (spinner) spinner.classList.add('hidden');
+            }
+        }, 50);
+    }
+
     function resetApp() {
         loadedStudentWorkbook = null;
         loadedFrameworkWorkbook = null;
+        loadedFacultyWorkbook = null;
         Object.assign(globalData, createEmptyGlobalData());
 
         document.getElementById('studentFileStatus').innerText = 'Chưa tải lên';
@@ -74,6 +104,15 @@ export function createAnalysisController({ globalData, showCustomMessage, onData
         document.getElementById('btnAnalyze').disabled = true;
         document.getElementById('studentFileInput').value = '';
         document.getElementById('frameworkFileInput').value = '';
+        const facultyInput = document.getElementById('facultyFileInput');
+        if (facultyInput) facultyInput.value = '';
+        const facultyStatus = document.getElementById('facultyFileStatus');
+        if (facultyStatus) {
+            facultyStatus.innerText = 'Chưa tải lên';
+            facultyStatus.className = 'mt-4 px-3.5 py-1 bg-slate-200/60 text-slate-600 rounded-xl text-xs font-bold';
+        }
+        const facultyButton = document.getElementById('btnAnalyzeFaculty');
+        if (facultyButton) facultyButton.disabled = true;
 
         onDataChanged();
     }
@@ -123,6 +162,7 @@ export function createAnalysisController({ globalData, showCustomMessage, onData
         handleFileSelect,
         loadExcelFile,
         startAnalysis,
+        startFacultyAnalysis,
         resetApp,
         parseFrameworkWorkbook,
         loadDemoData,

@@ -5,6 +5,7 @@ export function createEmptyGlobalData() {
         subjectsMap: {},
         classList: [],
         frameworkCourses: [],
-        frameworkMetadata: { totalCredits: 0 }
+        frameworkMetadata: { totalCredits: 0 },
+        facultyReport: null
     };
 }

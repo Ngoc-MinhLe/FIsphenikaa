@@ -83,10 +83,56 @@ export function createReportController({ globalData, showCustomMessage }) {
         showCustomMessage('Đã xuất báo cáo nhu cầu mở lớp theo khung chương trình!', 'success');
     }
 
+    function exportFacultyReport() {
+        const report = globalData.facultyReport;
+        if (!report || !report.records?.length) {
+            showCustomMessage('Chưa có dữ liệu phân tích theo khoa để xuất.', 'error');
+            return;
+        }
+
+        const groupLabel = { green: 'Xanh', yellow: 'Vàng', red: 'Đỏ' };
+        const summaryRows = report.faculties.map(item => ({
+            'Khoa / đơn vị': item.faculty,
+            'Tổng số SV': item.total,
+            'Nhom Xanh': item.green,
+            'Nhóm Vàng': item.yellow,
+            'Nhóm Đỏ': item.red,
+            'TB TC còn thiếu': Number(item.averageMissingCredits.toFixed(1)),
+            'TB HP còn thiếu': Number(item.averageMissingCourses.toFixed(1))
+        }));
+        const studentRows = report.records.map((student, index) => ({
+            STT: index + 1,
+            MSSV: student.id,
+            'Họ và tên': student.name,
+            'Khoa / đơn vị': student.faculty,
+            Lop: student.className,
+            'TC đã tích lũy': student.completedCredits ?? '',
+            'TC còn thiếu': student.missingCredits,
+            'HP còn thiếu': student.missingCourses,
+            Nhom: groupLabel[student.group],
+            'Khuyến nghị': student.recommendation,
+            'Nguồn sheet': student.sourceSheet
+        }));
+        const configRows = [
+            { ThiếtLập: 'Chỉ số phân nhóm', GiáTrị: report.config.metric === 'credits' ? 'Tín chỉ còn thiếu' : 'Học phần còn thiếu' },
+            { ThiếtLập: 'Nhóm Xanh tối đa', GiáTrị: report.config.greenMax },
+            { ThiếtLập: 'Nhóm Vàng tối đa', GiáTrị: report.config.yellowMax },
+            { ThiếtLập: 'Tổng sinh viên', GiáTrị: report.summary.total }
+        ];
+
+        downloadReportWorkbook('Bao_Cao_Phan_Tich_Sinh_Vien_Theo_Khoa.xlsx', [
+            { name: 'TongHopKhoa', rows: summaryRows },
+            { name: 'DanhSachSinhVien', rows: studentRows },
+            { name: 'CauHinhPhanNhom', rows: configRows }
+        ]);
+        showCustomMessage('Đã xuất báo cáo sinh viên theo khoa và nhóm Xanh/Vàng/Đỏ.', 'success');
+    }
+
     return {
         exportSubjectStudentsToExcel,
         exportToExcel,
         exportSummaryToExcel,
-        exportClassOpeningReport
+        exportClassOpeningReport,
+        exportFacultyReport
     };
 }
