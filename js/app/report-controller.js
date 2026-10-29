@@ -6,6 +6,23 @@ import {
     buildClassOpeningReportSheets
 } from '../excel/report-exporter.js';
 
+function getFacultyDetailKind(detail) {
+    const type = String(detail.courseType || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase('vi');
+    if (type.includes('bat buoc')) return 'mandatory';
+    if (type.includes('dieu kien')) return 'condition';
+    return 'elective';
+}
+
+function formatFacultyDetails(details, kind) {
+    return details
+        .filter(detail => getFacultyDetailKind(detail) === kind)
+        .map(detail => `${detail.blockCode ? `[${detail.blockCode}] ` : ''}${detail.courseCode ? `${detail.courseCode} - ` : ''}${detail.courseName} (${detail.credits} TC)`)
+        .join('\n');
+}
+
 export function createReportController({ globalData, showCustomMessage }) {
     function downloadReportWorkbook(filename, sheets) {
         const workbook = XLSX.utils.book_new();
@@ -109,9 +126,9 @@ export function createReportController({ globalData, showCustomMessage }) {
             'TC đã tích lũy': student.completedCredits ?? '',
             'TC còn thiếu': student.missingCredits,
             'HP còn thiếu': student.missingCourses,
-            'Phương án học phần hỗ trợ': (student.missingCourseDetails || [])
-                .map(detail => `${detail.blockCode ? `[${detail.blockCode}] ` : ''}${detail.courseName} (${detail.credits} TC)`)
-                .join('\n'),
+            'Học phần bắt buộc phải hoàn thành': formatFacultyDetails(student.missingCourseDetails || [], 'mandatory'),
+            'Điều kiện tốt nghiệp phải đạt': formatFacultyDetails(student.missingCourseDetails || [], 'condition'),
+            'Phương án tự chọn hỗ trợ': formatFacultyDetails(student.missingCourseDetails || [], 'elective'),
             Nhom: groupLabel[student.group],
             'Khuyến nghị': student.recommendation,
             'Nguồn sheet': student.sourceSheet

@@ -1,6 +1,7 @@
 import { normalizeText, sheetToMatrix } from './workbook-utils.js';
 
 const DEFAULT_CONFIG = { rule: 'course-status' };
+const CREDIT_BLOCK_CODES = ['A1', 'B1', 'C1', 'D1', 'E1', 'E2', 'A2', 'C2', 'D2.1'];
 
 function text(value) {
     return value === null || value === undefined ? '' : String(value).trim();
@@ -65,6 +66,11 @@ function deriveFaculty(sheetName, className) {
     if (!genericSheet) return sheetName;
     const match = text(className).match(/K\s*\d+\s*[-_]\s*([^_\-/\s]+)/i);
     return match?.[1] || sheetName;
+}
+
+function getCreditBlockCode(value) {
+    const normalized = normalizeText(value);
+    return CREDIT_BLOCK_CODES.find(code => normalized.includes(code)) || '';
 }
 
 function getHeaderRows(matrix, headerRowIndex) {
@@ -170,6 +176,14 @@ function parseSummaryRows(matrix, headerRowIndex, headerRows, sheetName) {
             ? parseNumber(row[missingCreditsCol])
             : fallbackMissingCreditCols.reduce((sum, col) => sum + (parseNumber(row[col]) || 0), 0);
         const missingCourses = missingCoursesCol >= 0 ? parseNumber(row[missingCoursesCol]) : null;
+        const missingCreditsByBlock = {};
+        for (let col = 0; col < maxColumns; col += 1) {
+            const blockCode = getCreditBlockCode(headerRows.map(header => header?.[col]).filter(Boolean).join(' '));
+            const subheader = normalizeText(headerRows[1]?.[col] || '');
+            if (blockCode && subheader.includes('THIEU')) {
+                missingCreditsByBlock[blockCode] = parseNumber(row[col]) ?? 0;
+            }
+        }
         const rawFaculty = text(facultyCol >= 0 ? row[facultyCol] : '');
         const faculty = rawFaculty && !(/^[-+]?\d+(?:[.,]\d+)?$/).test(rawFaculty)
             ? rawFaculty
@@ -184,6 +198,7 @@ function parseSummaryRows(matrix, headerRowIndex, headerRows, sheetName) {
             completedCredits: parseNumber(completedCreditsCol >= 0 ? row[completedCreditsCol] : null),
             missingCredits: missingCredits ?? 0,
             missingCourses: missingCourses ?? 0,
+            missingCreditsByBlock,
             gpa: parseNumber(gpaCol >= 0 ? row[gpaCol] : null),
             missingCourseDetails: [],
             sourceSheet: sheetName

@@ -50,6 +50,46 @@ function renderFacultyRows(report) {
         </tr>`).join('');
 }
 
+function normalizeDetailType(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase('vi');
+}
+
+function getDetailKind(detail) {
+    const type = normalizeDetailType(detail.courseType);
+    if (type.includes('bat buoc')) return 'mandatory';
+    if (type.includes('dieu kien')) return 'condition';
+    return 'elective';
+}
+
+function renderSupportDetailSection(title, details, student, { mandatory = false } = {}) {
+    if (!details.length) return '';
+    const grouped = new Map();
+    details.forEach(detail => {
+        const block = detail.blockCode || 'Khác';
+        if (!grouped.has(block)) grouped.set(block, []);
+        grouped.get(block).push(detail);
+    });
+
+    const blocks = [...grouped.entries()].map(([block, blockDetails]) => {
+        const requiredCredits = Number(student.missingCreditsByBlock?.[block] || 0);
+        const blockNote = requiredCredits > 0 ? ` · cần đạt thêm ${formatNumber(requiredCredits)} TC` : '';
+        const items = [...blockDetails]
+            .sort((a, b) => String(a.courseName).localeCompare(String(b.courseName), 'vi'))
+            .map(detail => `
+                <li class="${mandatory ? 'font-bold text-slate-800' : 'text-slate-600'}">
+                    ${detail.courseCode ? `<span class="mr-1 text-slate-400">${escapeHtml(detail.courseCode)}</span>` : ''}
+                    ${escapeHtml(detail.courseName)}
+                    <span class="ml-1 font-normal text-slate-400">(${formatNumber(detail.credits)} TC)</span>
+                </li>`).join('');
+        return `<div class="mt-2"><div class="text-[11px] font-bold uppercase tracking-wide text-slate-500">${escapeHtml(block)}${blockNote}</div><ul class="mt-1 space-y-1">${items}</ul></div>`;
+    }).join('');
+
+    return `<section class="rounded-lg border border-slate-100 bg-white/70 p-2"><div class="text-xs font-extrabold ${mandatory ? 'text-rose-700' : 'text-slate-700'}">${title} (${details.length})</div>${blocks}</section>`;
+}
+
 function renderStudentRows(report, search, facultyFilter, groupFilter) {
     const query = String(search || '').trim().toLocaleLowerCase('vi');
     const filtered = report.records.filter(student => {
@@ -63,14 +103,20 @@ function renderStudentRows(report, search, facultyFilter, groupFilter) {
     const rows = filtered.map((student, index) => {
         const meta = GROUP_META[student.group];
         const details = student.missingCourseDetails || [];
-        const detailLabel = details.length === (student.missingCourses || 0)
-            ? `Xem ${details.length} học phần`
-            : `Xem ${details.length} dòng hỗ trợ`;
-        const detailNote = details.length !== (student.missingCourses || 0)
-            ? `<p class="mt-2 text-[11px] text-slate-500">HP thiếu theo bảng tổng hợp: ${formatNumber(student.missingCourses)}. Các dòng hỗ trợ có thể gồm nhiều phương án tự chọn; không cộng số dòng hoặc TC của danh sách này vào TC thiếu.</p>`
+        const mandatoryDetails = details.filter(detail => getDetailKind(detail) === 'mandatory');
+        const conditionDetails = details.filter(detail => getDetailKind(detail) === 'condition');
+        const electiveDetails = details.filter(detail => getDetailKind(detail) === 'elective');
+        const detailLabel = `Xem ${details.length} dòng hỗ trợ`;
+        const detailNote = details.length
+            ? `<p class="mt-2 text-[11px] text-slate-500">HP thiếu theo bảng tổng hợp: ${formatNumber(student.missingCourses)} · TC thiếu tổng: ${formatNumber(student.missingCredits)}. Không cộng số dòng hoặc TC của các phương án tự chọn vào TC thiếu.</p>`
             : '';
+        const detailSections = [
+            renderSupportDetailSection('Bắt buộc phải hoàn thành', mandatoryDetails, student, { mandatory: true }),
+            renderSupportDetailSection('Điều kiện tốt nghiệp phải đạt', conditionDetails, student),
+            renderSupportDetailSection('Tự chọn, sinh viên lựa chọn đủ TC', electiveDetails, student)
+        ].join('');
         const courseDetailsMarkup = details.length
-            ? `<details class="text-left"><summary class="cursor-pointer font-semibold text-brand-700">${detailLabel}</summary>${detailNote}<ul class="mt-2 space-y-1 text-xs text-slate-600">${details.map(detail => `<li><span class="font-semibold">${escapeHtml(detail.courseName)}</span> <span class="text-slate-400">${detail.blockCode ? `[${escapeHtml(detail.blockCode)}] ` : ''}${detail.courseType ? `${escapeHtml(detail.courseType)} · ` : ''}(${formatNumber(detail.credits)} TC)</span></li>`).join('')}</ul></details>`
+            ? `<details class="text-left"><summary class="cursor-pointer font-semibold text-brand-700">${detailLabel}</summary>${detailNote}<div class="mt-2 space-y-2 text-xs">${detailSections}</div></details>`
             : '<span class="text-slate-400">Chưa có chi tiết học phần</span>';
         return `
             <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
